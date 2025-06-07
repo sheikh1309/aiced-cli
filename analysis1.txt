@@ -1,0 +1,136 @@
+```json
+{
+  "analysis_summary": "Found critical security vulnerabilities including hardcoded credentials, SQL injection risks, memory leaks from file uploads, and insufficient error handling. The codebase needs immediate security fixes and memory management improvements.",
+  "changes": [
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/.npmrc",
+      "reason": "Remove hardcoded base64 credentials from version control",
+      "severity": "critical",
+      "line_changes": [
+        {
+          "action": "delete",
+          "line_number": 6
+        },
+        {
+          "action": "insert_after",
+          "line_number": 5,
+          "new_content": "# _auth should be set via environment variable or .env file"
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/src/resolvers/WebsiteResolver.ts",
+      "reason": "Fix SQL injection vulnerability in WHERE clause construction",
+      "severity": "high",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 99,
+          "old_content": "            whereExpressions.push(`website.id IN (${ids})`);\n",
+          "new_content": "            whereExpressions.push(`website.id IN (${ids.map(() => '?').join(',')})`);\n"
+        },
+        {
+          "action": "replace",
+          "line_number": 103,
+          "old_content": "            whereExpressions.push(`website.domain IN ('${domains.join(\"','\")}')`);",
+          "new_content": "            whereExpressions.push(`website.domain IN (${domains.map(() => '?').join(',')})`);"
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/src/resolvers/mediaGalleryResolver.ts",
+      "reason": "Fix memory leak from concurrent file uploads",
+      "severity": "high",
+      "line_changes": [
+        {
+          "action": "insert_after",
+          "line_number": 63,
+          "new_content": "        // Limit concurrent uploads to prevent memory exhaustion"
+        },
+        {
+          "action": "replace",
+          "line_number": 77,
+          "old_content": "        const promises = mediaGalleryAssetInputs.map(async (input: MediaGalleryAssetInput) => {",
+          "new_content": "        // Process uploads in chunks to prevent memory issues\n        const CHUNK_SIZE = 3;\n        const results = [];\n        \n        for (let i = 0; i < mediaGalleryAssetInputs.length; i += CHUNK_SIZE) {\n            const chunk = mediaGalleryAssetInputs.slice(i, i + CHUNK_SIZE);\n            const chunkPromises = chunk.map(async (input: MediaGalleryAssetInput) => {"
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/src/utils/ProductRankingFileUtils.ts",
+      "reason": "Fix memory leak by ensuring stream is properly closed",
+      "severity": "medium",
+      "line_changes": [
+        {
+          "action": "replace_range",
+          "start_line": 45,
+          "end_line": 55,
+          "old_content": [
+            "    static async upload_csv(rows: ProductRankingRow[], domain: string): Promise<string> {",
+            "        const columns = [\"product\", \"outbound\", \"providerId\", \"providerName\", \"currentPosition\", \"newPosition\"];",
+            "        const write_stream = new PassThrough();",
+            "        write_stream.write(columns.join(\",\") + \"\\n\");",
+            "",
+            "        for (const row of rows) {",
+            "            const csv_row = this.get_csv_row(row, columns);",
+            "            write_stream.write(csv_row);",
+            "        }",
+            "",
+            "        return await this.close_write_stream(write_stream, domain);"
+          ],
+          "new_content": [
+            "    static async upload_csv(rows: ProductRankingRow[], domain: string): Promise<string> {",
+            "        const columns = [\"product\", \"outbound\", \"providerId\", \"providerName\", \"currentPosition\", \"newPosition\"];",
+            "        const write_stream = new PassThrough();",
+            "        ",
+            "        try {",
+            "            write_stream.write(columns.join(\",\") + \"\\n\");",
+            "",
+            "            for (const row of rows) {",
+            "                const csv_row = this.get_csv_row(row, columns);",
+            "                write_stream.write(csv_row);",
+            "            }",
+            "",
+            "            return await this.close_write_stream(write_stream, domain);",
+            "        } catch (error) {",
+            "            write_stream.destroy();",
+            "            throw error;",
+            "        }"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/src/resolvers/SourcesResolver.ts",
+      "reason": "Fix error exposure in GraphQL error handling",
+      "severity": "medium",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 85,
+          "old_content": "                throw new GraphQLError(error);",
+          "new_content": "                console.error('Conversion action creation failed:', error);\n                throw new GraphQLError('Failed to create conversion actions');"
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "creator-api-websites/src/resolvers/ProductResolver.ts",
+      "reason": "Fix SQL injection in product queries",
+      "severity": "high",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 115,
+          "old_content": "            .where(`id IN (${ids})`)",
+          "new_content": "            .where('id IN (:...ids)', { ids })"
+        }
+      ]
+    }
+  ]
+}
+```

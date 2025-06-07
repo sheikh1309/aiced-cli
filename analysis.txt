@@ -1,0 +1,377 @@
+{
+  "analysis_summary": "Found critical security vulnerabilities including SQL injection risks, memory leak potential in resolver constructors, performance issues with unbatched operations, and configuration problems. Major issues include unsafe SQL query construction, missing error handling, and lack of proper resource cleanup.",
+  "changes": [
+    {
+      "type": "modify_file",
+      "file_path": "src/resolvers/WebsiteResolver.ts",
+      "reason": "Fix SQL injection vulnerabilities in raw queries",
+      "severity": "critical",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 562,
+          "old_content": "                 where \"websiteId\" = ${website.id}",
+          "new_content": "                 where \"websiteId\" = $1"
+        },
+        {
+          "action": "replace",
+          "line_number": 566,
+          "old_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query);",
+          "new_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query, [website.id]);"
+        },
+        {
+          "action": "replace",
+          "line_number": 576,
+          "old_content": "                 where \"websiteId\" = ${website.id}",
+          "new_content": "                 where \"websiteId\" = $1"
+        },
+        {
+          "action": "replace",
+          "line_number": 580,
+          "old_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query);",
+          "new_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query, [website.id]);"
+        },
+        {
+          "action": "replace",
+          "line_number": 590,
+          "old_content": "                 where \"websiteId\" = ${website.id}",
+          "new_content": "                 where \"websiteId\" = $1"
+        },
+        {
+          "action": "replace",
+          "line_number": 594,
+          "old_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query);",
+          "new_content": "        const [{ labels }] = await db_data_source.createQueryRunner().query(raw_query, [website.id]);"
+        }
+      ]
+    },
+    {
+      "type": "modify_file", 
+      "file_path": "src/resolvers/mediaGalleryResolver.ts",
+      "reason": "Fix SQL injection vulnerability and add upload concurrency limit",
+      "severity": "critical",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 51,
+          "old_content": "            whereExpressions.push(`\"mediaGalleryAsset\".\"path\" = '${path}'`);",
+          "new_content": "            whereExpressions.push(`\"mediaGalleryAsset\".\"path\" = :path`);"
+        },
+        {
+          "action": "insert_after",
+          "line_number": 51,
+          "new_content": "            context.loader.setParameter('path', path);"
+        },
+        {
+          "action": "replace_range",
+          "start_line": 98,
+          "end_line": 121,
+          "old_content": [
+            "        const promises = mediaGalleryAssetInputs.map(async (input: MediaGalleryAssetInput) => {",
+            "            const image = await FileUtils.readFileStreamToBuffer(await input.image);",
+            "            const metadata = await sharp(image).metadata();",
+            "            const date = dayjs().format(\"YYYY-MM-DD-HH-mm-ss\");",
+            "            const mediaGalleryAsset = new MediaGalleryAsset();",
+            "            const file_path = `${IMAGES_DIRECTORY}/${date}/${input.filename}`;",
+            "            filesPathsToInvalidate.push(`/${file_path}`);",
+            "",
+            "            const path = await this.s3FileHostingHelper.uploadFile(image, website.bucketName, file_path, true, undefined);",
+            "            const moon_box_key = `${website.domain}/media_gallery_assets/${date}/${input.filename}`;",
+            "            await this.s3FileHostingHelper.upload(process.env.MOONBOX_BUCKET, moon_box_key, image, false);",
+            "            await this.s3FileHostingHelper.tag_object(process.env.MOONBOX_BUCKET, moon_box_key, [{ Key: \"USER_UPLOAD\", Value: \"TRUE\" }]);",
+            "            const params = {",
+            "                path: path,",
+            "                metadata: metadata,",
+            "                altText: input.altText,",
+            "                website: { id: websiteId },",
+            "                filename: input.filename,",
+            "            };",
+            "            Object.assign(mediaGalleryAsset, params);",
+            "            assets.push(mediaGalleryAsset);",
+            "        });",
+            "",
+            "        await Promise.all(promises);"
+          ],
+          "new_content": [
+            "        // Process uploads in batches to prevent memory issues",
+            "        const BATCH_SIZE = 5;",
+            "        for (let i = 0; i < mediaGalleryAssetInputs.length; i += BATCH_SIZE) {",
+            "            const batch = mediaGalleryAssetInputs.slice(i, i + BATCH_SIZE);",
+            "            const promises = batch.map(async (input: MediaGalleryAssetInput) => {",
+            "                const image = await FileUtils.readFileStreamToBuffer(await input.image);",
+            "                const metadata = await sharp(image).metadata();",
+            "                const date = dayjs().format(\"YYYY-MM-DD-HH-mm-ss\");",
+            "                const mediaGalleryAsset = new MediaGalleryAsset();",
+            "                const file_path = `${IMAGES_DIRECTORY}/${date}/${input.filename}`;",
+            "                filesPathsToInvalidate.push(`/${file_path}`);",
+            "",
+            "                const path = await this.s3FileHostingHelper.uploadFile(image, website.bucketName, file_path, true, undefined);",
+            "                const moon_box_key = `${website.domain}/media_gallery_assets/${date}/${input.filename}`;",
+            "                await this.s3FileHostingHelper.upload(process.env.MOONBOX_BUCKET, moon_box_key, image, false);",
+            "                await this.s3FileHostingHelper.tag_object(process.env.MOONBOX_BUCKET, moon_box_key, [{ Key: \"USER_UPLOAD\", Value: \"TRUE\" }]);",
+            "                const params = {",
+            "                    path: path,",
+            "                    metadata: metadata,",
+            "                    altText: input.altText,",
+            "                    website: { id: websiteId },",
+            "                    filename: input.filename,",
+            "                };",
+            "                Object.assign(mediaGalleryAsset, params);",
+            "                assets.push(mediaGalleryAsset);",
+            "            });",
+            "",
+            "            await Promise.all(promises);",
+            "        }"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "src/utils/uploadFaviconUtils.ts",
+      "reason": "Add proper error context and logging",
+      "severity": "medium",
+      "line_changes": [
+        {
+          "action": "replace_range",
+          "start_line": 47,
+          "end_line": 49,
+          "old_content": [
+            "        } catch (error) {",
+            "            throw error;",
+            "        }"
+          ],
+          "new_content": [
+            "        } catch (error) {",
+            "            console.error('Failed to generate favicons:', error);",
+            "            throw new Error(`Failed to generate favicons: ${error.message}`);",
+            "        }"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "Dockerfile",
+      "reason": "Add non-root user and multi-stage build for security and size optimization",
+      "severity": "high",
+      "line_changes": [
+        {
+          "action": "replace_range",
+          "start_line": 1,
+          "end_line": 20,
+          "old_content": [
+            "FROM node:18.18.0-alpine",
+            "",
+            "RUN apk add g++ make py3-pip",
+            "",
+            "WORKDIR /usr/src/app",
+            "",
+            "COPY package.json ./",
+            "",
+            "COPY .npmrc .npmrc",
+            "",
+            "COPY yarn.lock ./",
+            "",
+            "RUN yarn install",
+            "",
+            "COPY . .",
+            "",
+            "RUN yarn build",
+            "",
+            "EXPOSE 2400",
+            "",
+            "CMD [ \"yarn\", \"serve\" ]"
+          ],
+          "new_content": [
+            "# Build stage",
+            "FROM node:18.18.0-alpine AS builder",
+            "",
+            "RUN apk add g++ make py3-pip",
+            "",
+            "WORKDIR /usr/src/app",
+            "",
+            "COPY package.json yarn.lock .npmrc ./",
+            "RUN yarn install --frozen-lockfile",
+            "",
+            "COPY . .",
+            "RUN yarn build",
+            "",
+            "# Production stage",
+            "FROM node:18.18.0-alpine",
+            "",
+            "RUN apk add --no-cache dumb-init && \\",
+            "    addgroup -g 1001 -S nodejs && \\",
+            "    adduser -S nodejs -u 1001",
+            "",
+            "WORKDIR /usr/src/app",
+            "",
+            "COPY --from=builder --chown=nodejs:nodejs /usr/src/app/dist ./dist",
+            "COPY --from=builder --chown=nodejs:nodejs /usr/src/app/node_modules ./node_modules",
+            "COPY --chown=nodejs:nodejs package.json ./",
+            "",
+            "USER nodejs",
+            "",
+            "EXPOSE 2400",
+            "",
+            "ENTRYPOINT [\"dumb-init\", \"--\"]",
+            "CMD [\"node\", \"dist/server.js\"]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "src/resolvers/RssResolver.ts",
+      "reason": "Replace hardcoded setTimeout with configurable delay",
+      "severity": "medium",
+      "line_changes": [
+        {
+          "action": "replace_range",
+          "start_line": 76,
+          "end_line": 84,
+          "old_content": [
+            "        setTimeout(() => {",
+            "            try {",
+            "                this.cloudFrontHelper.invalidateFiles(website.distributionId, [`/realtime/${website_id}/rss`]);",
+            "            } catch (e) {",
+            "                console.error(`failed to invalidate path \"/realtime/${website_id}/rss\", err = ${JSON.stringify(e)}`);",
+            "            }",
+            "        }, 60000);"
+          ],
+          "new_content": [
+            "        // Schedule CloudFront invalidation with configurable delay",
+            "        const INVALIDATION_DELAY_MS = parseInt(process.env.RSS_INVALIDATION_DELAY_MS || '60000', 10);",
+            "        if (INVALIDATION_DELAY_MS > 0) {",
+            "            setTimeout(() => {",
+            "                this.cloudFrontHelper.invalidateFiles(website.distributionId, [`/realtime/${website_id}/rss`])",
+            "                    .catch(e => console.error(`Failed to invalidate path \"/realtime/${website_id}/rss\", err = ${JSON.stringify(e)}`));",
+            "            }, INVALIDATION_DELAY_MS);",
+            "        }"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "src/utils/dynamoUtil.ts",
+      "reason": "Add proper TypeScript types instead of 'any'",
+      "severity": "medium",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 9,
+          "old_content": "    async removeDynamoRowsInBatch(tableName: string, dynamoParams: any[]) {",
+          "new_content": "    async removeDynamoRowsInBatch(tableName: string, dynamoParams: AWS.DynamoDB.DocumentClient.WriteRequest[]) {"
+        },
+        {
+          "action": "replace",
+          "line_number": 12,
+          "old_content": "            const batchParams: any = { RequestItems: {} };",
+          "new_content": "            const batchParams: AWS.DynamoDB.DocumentClient.BatchWriteItemInput = { RequestItems: {} };"
+        },
+        {
+          "action": "replace",
+          "line_number": 22,
+          "old_content": "        const batchParam: any = { DeleteRequest: { Key: {} } };",
+          "new_content": "        const batchParam: AWS.DynamoDB.DocumentClient.WriteRequest = { DeleteRequest: { Key: {} } };"
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "src/resolvers/ProductResolver.ts",
+      "reason": "Wrap database operations in proper transaction",
+      "severity": "high",
+      "line_changes": [
+        {
+          "action": "replace_range",
+          "start_line": 57,
+          "end_line": 74,
+          "old_content": [
+            "        const product = new Product();",
+            "        Object.assign(product, _.cloneDeep(upsert_product_input));",
+            "        delete product.assets;",
+            "        delete product.providers;",
+            "        await Product.save(product);",
+            "",
+            "        const { assets } = await Product.findOne({ where: { id: product.id }, relations: [\"assets\"] });",
+            "",
+            "        if (!!upsert_product_input.assets?.length) {",
+            "            const template_assets_ids: number[] = _.map(upsert_product_input.assets, \"templateAssetId\");",
+            "            const template_assets = [];",
+            "            if (!!template_assets_ids) {",
+            "                const input_template_assets = await TemplateAsset.find({ where: { id: In(template_assets_ids) } });",
+            "                template_assets.push(...input_template_assets);",
+            "            }",
+            "            const product_assets = SectionUtils.update_asset(upsert_product_input.assets, assets, template_assets);",
+            "            product.assets = ProductAsset.create(product_assets);",
+            "            await product.save();"
+          ],
+          "new_content": [
+            "        return await DatabaseUtils.transaction(context.db_data_source, async (entityManager) => {",
+            "            const product = new Product();",
+            "            Object.assign(product, _.cloneDeep(upsert_product_input));",
+            "            delete product.assets;",
+            "            delete product.providers;",
+            "            await entityManager.save(product);",
+            "",
+            "            const { assets } = await entityManager.findOne(Product, { where: { id: product.id }, relations: [\"assets\"] });",
+            "",
+            "            if (!!upsert_product_input.assets?.length) {",
+            "                const template_assets_ids: number[] = _.map(upsert_product_input.assets, \"templateAssetId\");",
+            "                const template_assets = [];",
+            "                if (!!template_assets_ids) {",
+            "                    const input_template_assets = await entityManager.find(TemplateAsset, { where: { id: In(template_assets_ids) } });",
+            "                    template_assets.push(...input_template_assets);",
+            "                }",
+            "                const product_assets = SectionUtils.update_asset(upsert_product_input.assets, assets, template_assets);",
+            "                product.assets = ProductAsset.create(product_assets);",
+            "                await entityManager.save(product);",
+            "            }"
+          ]
+        },
+        {
+          "action": "insert_after",
+          "line_number": 87,
+          "new_content": "            return product;"
+        },
+        {
+          "action": "insert_after",
+          "line_number": 88,
+          "new_content": "        });"
+        },
+        {
+          "action": "delete",
+          "line_number": 89
+        }
+      ]
+    },
+    {
+      "type": "modify_file",
+      "file_path": "src/utils/cookieHandler.ts",
+      "reason": "Add TODO comments for unimplemented methods",
+      "severity": "low",
+      "line_changes": [
+        {
+          "action": "replace",
+          "line_number": 3,
+          "old_content": "    get(cookieName: string) { return \"\"; }",
+          "new_content": "    get(cookieName: string) { /* TODO: Implement cookie retrieval */ return \"\"; }"
+        },
+        {
+          "action": "replace",
+          "line_number": 5,
+          "old_content": "    put(cookieName: string, cookieValue: any, ttl: Date) { return true; }",
+          "new_content": "    put(cookieName: string, cookieValue: any, ttl: Date) { /* TODO: Implement cookie storage */ return true; }"
+        },
+        {
+          "action": "replace",
+          "line_number": 7,
+          "old_content": "    isCookiesEnabled() { return false; }",
+          "new_content": "    isCookiesEnabled() { /* TODO: Implement cookie check */ return false; }"
+        }
+      ]
+    }
+  ]
+}
