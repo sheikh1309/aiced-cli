@@ -7,6 +7,7 @@ mod helpers;
 mod traits;
 mod enums;
 mod constants;
+mod logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {

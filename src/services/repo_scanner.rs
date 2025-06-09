@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use crate::structs::file_info::FileInfo;
 
 pub struct RepoScanner {
@@ -190,59 +190,5 @@ impl RepoScanner {
 
         // No wildcard, check for substring match (common in gitignore)
         text.contains(pattern)
-    }
-
-    fn detect_language(&self, filename: PathBuf) -> String {
-        let path = Path::new(filename.as_os_str());
-        let extension = match path.extension() {
-            Some(ext) => ext.to_string_lossy().to_lowercase(),
-            None => return "unknown".to_string(),
-        };
-
-        match extension.as_str() {
-            // C/C++
-            "c" | "h" => "C".to_string(),
-            "cpp" | "hpp" | "cc" | "cxx" | "c++" => "C++".to_string(),
-
-            // JavaScript/TypeScript
-            "js" => "JavaScript".to_string(),
-            "jsx" => "JSX".to_string(),
-            "ts" => "TypeScript".to_string(),
-            "tsx" => "TSX".to_string(),
-
-            // Python
-            "py" | "pyw" => "Python".to_string(),
-
-            // Other programming languages
-            "java" => "Java".to_string(),
-            "kt" => "Kotlin".to_string(),
-            "rb" => "Ruby".to_string(),
-            "php" => "PHP".to_string(),
-            "go" => "Go".to_string(),
-            "rs" => "Rust".to_string(),
-            "cs" => "C#".to_string(),
-            "swift" => "Swift".to_string(),
-
-            // Web technologies
-            "html" | "htm" => "HTML".to_string(),
-            "css" => "CSS".to_string(),
-            "scss" | "sass" => "SASS".to_string(),
-
-            // Data formats
-            "json" => "JSON".to_string(),
-            "xml" => "XML".to_string(),
-            "yaml" | "yml" => "YAML".to_string(),
-
-            // Documentation
-            "md" | "markdown" => "Markdown".to_string(),
-
-            // Scripts
-            "sh" | "bash" => "Shell".to_string(),
-
-            // Database
-            "sql" => "SQL".to_string(),
-
-            _ => "unknown".to_string(),
-        }
     }
 }

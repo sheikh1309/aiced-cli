@@ -1,10 +1,12 @@
 use std::fs;
+use std::time::{Duration, Instant};
 use futures::StreamExt;
 use crate::structs::message::Message;
 use crate::helpers::prompt_generator;
 use crate::enums::file_change::FileChange;
 use crate::traits::ai_provider::AiProvider;
 use crate::constants::prompts::SYSTEM_PROMPT;
+use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
@@ -44,11 +46,28 @@ impl CodeAnalyzer
 
         let messages = vec![system_prompt, user_prompt];
 
+        let mut logger = AnimatedLogger::new("Analyzing Repository".to_string());
+
+        logger.start();
+
         let mut response_text = String::new();
-        let mut stream = self.ai_provider.generate_completion_stream(&messages).await?;
-        println!("🤖 Analyzing repository...");
+        let mut stream = match self.ai_provider.generate_completion_stream(&messages).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                logger.error(&format!("Failed to create stream: {}", e)).await;
+                return Err(Box::new(e) as Box<dyn std::error::Error>);
+            }
+        };
+
+        let mut last_update = Instant::now();
+        let update_interval = Duration::from_millis(150);
+
+        // todo - get empty responses
         while let Some(result) = stream.next().await {
-            println!("🤖 Analyzing repository...");
+            if last_update.elapsed() >= update_interval {
+                last_update = Instant::now();
+            }
+
             match result {
                 Ok(item) => {
                     response_text.push_str(&item.content);
@@ -60,10 +79,19 @@ impl CodeAnalyzer
             }
         }
 
-        fs::write("analysis.txt", &response_text.replace("```json\n", "").replace("\n```", ""))
-            .map_err(|e| format!("Failed to write JSON file: {}", e))?;
+        logger.stop("Analysis complete").await;
+        fs::write("response_text.txt", &response_text).map_err(|e| format!("Failed to write Response file: {}", e))?;
         
-        let analysis: AnalysisResponse = serde_json::from_str(&response_text.replace("```json\n", "").replace("\n```", ""))
+        
+        let clean_response = response_text
+            .trim()
+            .strip_prefix("```json")
+            .unwrap_or(&response_text)
+            .strip_suffix("```")
+            .unwrap_or(&response_text)
+            .trim();
+
+        let analysis: AnalysisResponse = serde_json::from_str(clean_response)
             .map_err(|e| format!("Failed to parse AI response as JSON: {}", e))?;
 
         Ok(analysis)

@@ -39,45 +39,16 @@ struct StreamResponse {
     #[serde(rename = "type")]
     event_type: String,
     delta: Option<StreamDelta>,
-    index: Option<u32>,
-}
-
-#[derive(Deserialize)]
-struct StreamMessage {
-    id: Option<String>,
-    #[serde(rename = "type")]
-    message_type: Option<String>,
-    role: Option<String>,
-    content: Option<Vec<ContentBlock>>,
-    model: Option<String>,
-    stop_reason: Option<String>,
-    stop_sequence: Option<String>,
-    usage: Option<Usage>,
-}
-
-#[derive(Deserialize)]
-struct ContentBlock {
-    #[serde(rename = "type")]
-    content_type: String,
-    text: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct StreamDelta {
     #[serde(rename = "type")]
-    delta_type: Option<String>,
     text: Option<String>,
     stop_reason: Option<String>,
-    stop_sequence: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct Usage {
-    input_tokens: Option<u32>,
-    output_tokens: Option<u32>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AnthropicError {
     ApiError(String),
     NetworkError(String),
