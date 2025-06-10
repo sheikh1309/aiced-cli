@@ -31,7 +31,7 @@ impl CodeAnalyzer {
     }
 
     pub async fn analyze_repository(&self) -> Result<AnalysisResponse, Box<dyn std::error::Error>> {
-        let files = self.repo_scanner.scan_files();
+        let files = self.repo_scanner.scan_files_async().await?;
 
         let system_prompt = Message {
             role: "system".to_string(),

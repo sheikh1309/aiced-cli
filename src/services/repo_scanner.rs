@@ -1,15 +1,20 @@
 use std::collections::HashSet;
-use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tokio::fs;
+use futures::{stream, StreamExt};
 use crate::structs::file_info::FileInfo;
 
 pub struct RepoScanner {
-    repo_path: String
+    repo_path: String,
+    max_concurrent_reads: usize,
 }
 
 impl RepoScanner {
     pub fn new(repo_path: String) -> Self {
-        Self { repo_path }
+        Self { 
+            repo_path,
+            max_concurrent_reads: 10,
+        }
     }
 
     fn get_default_image_patterns(&self) -> HashSet<String> {
@@ -27,83 +32,109 @@ impl RepoScanner {
         image_extensions.into_iter().map(String::from).collect()
     }
 
-    fn load_gitignore(&self, repo_path: &str) -> Result<HashSet<String>, std::io::Error> {
+    async fn load_gitignore(&self, repo_path: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
         let gitignore_path = format!("{}/.gitignore", repo_path);
+        let mut patterns = self.get_default_image_patterns();
+        patterns.insert(String::from(".git/"));
 
-        let mut patterns: HashSet<String> = self.get_default_image_patterns();
-        patterns.extend(HashSet::from([String::from(".git/")]));
+        if let Ok(content) = fs::read_to_string(gitignore_path).await {
+            let gitignore_patterns: HashSet<String> = content
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(|line| line.to_string())
+                .collect();
 
-        match fs::read_to_string(gitignore_path) {
-            Ok(content) => {
-                let gitignore_patterns: HashSet<String> = content
-                    .lines()
-                    .map(|line| line.trim())
-                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                    .map(|line| line.to_string())
-                    .collect();
-
-                patterns.extend(gitignore_patterns);
-            },
-            Err(_) => {
-                eprintln!("Warning: .gitignore file not found, using default image patterns only");
-            }
+            patterns.extend(gitignore_patterns);
         }
-
-        Ok(patterns)
-    }
-
-    pub fn scan_files(&self) -> Vec<FileInfo> {
-        let mut patterns = self.load_gitignore(self.repo_path.as_str()).unwrap_or_else(|_e| HashSet::new());
+        
+        
+        // todo - remove
         patterns.insert(String::from("test/"));
         patterns.insert(String::from("dist/"));
         patterns.insert(String::from("messages/"));
         patterns.insert(String::from(".vscode/"));
         patterns.insert(String::from("yarn.lock"));
-        let mut files: Vec<FileInfo> = Vec::new();
-        self.collect_files(Path::new(&self.repo_path), &patterns, &mut files, &self.repo_path);
-        files
+
+        Ok(patterns)
     }
 
-    fn collect_files(&self, dir: &Path, patterns: &HashSet<String>, files: &mut Vec<FileInfo>, repo_root: &str) {
-        match fs::read_dir(dir) {
-            Ok(entries) => {
-                for entry in entries.flatten() {
-                    let path = entry.path();
+    pub async fn scan_files_async(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
+        let patterns = self.load_gitignore(&self.repo_path).await?;
 
-                    let relative_path = if let Ok(rel) = path.strip_prefix(repo_root) {
-                        rel.to_string_lossy().to_string()
-                    } else {
-                        path.to_string_lossy().to_string()
-                    };
+        // First, collect all file paths
+        let file_paths = self.collect_file_paths_async(Path::new(&self.repo_path), &patterns).await?;
 
-                    if self.should_ignore_path(&relative_path, &path, patterns) {
-                        continue;
-                    }
+        println!("📁 Found {} files to analyze", file_paths.len());
 
-                    if path.is_file() {
-                        match fs::read_to_string(&path) {
-                            Ok(content) => {
-                                let file = FileInfo {
-                                    path: path.to_string_lossy().to_string(),
-                                    content
-                                };
-                                files.push(file)
-                            },
-                            Err(e) => {
-                                eprintln!("Error reading file {:?}: {}", path, e);
-                            }
-                        }
-                    } else if path.is_dir() && !self.should_ignore_path(&relative_path, &path, patterns) {
-                        self.collect_files(&path, patterns, files, repo_root);
+        // Process files concurrently with progress tracking
+        let total_files = file_paths.len();
+        let mut processed = 0;
+
+        let files: Vec<FileInfo> = stream::iter(file_paths)
+            .map(|path| async move {
+                match fs::read_to_string(&path).await {
+                    Ok(content) => Ok(FileInfo {
+                        path: path.to_string_lossy().to_string(),
+                        content,
+                    }),
+                    Err(e) => {
+                        eprintln!("⚠️ Error reading {}: {}", path.display(), e);
+                        Err(e)
                     }
                 }
-            },
-            Err(e) => {
-                eprintln!("Error reading directory {:?}: {}", dir, e);
-            }
-        }
+            })
+            .buffer_unordered(self.max_concurrent_reads) // Process N files concurrently
+            .filter_map(|result| async move {
+                match result {
+                    Ok(file_info) => {
+                        processed += 1;
+                        if processed % 100 == 0 {
+                            println!("📊 Progress: {}/{} files processed", processed, total_files);
+                        }
+                        Some(file_info)
+                    }
+                    Err(_) => None,
+                }
+            })
+            .collect()
+            .await;
+
+        println!("✅ Processed {} files successfully", files.len());
+        Ok(files)
     }
 
+    async fn collect_file_paths_async(&self, dir: &Path, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        let mut paths = Vec::new();
+        let mut dirs_to_process = vec![dir.to_path_buf()];
+
+        while let Some(current_dir) = dirs_to_process.pop() {
+            let mut entries = fs::read_dir(&current_dir).await?;
+
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                let metadata = entry.metadata().await?;
+
+                let relative_path = path.strip_prefix(&self.repo_path)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .to_string();
+
+                if self.should_ignore_path(&relative_path, &path, patterns) {
+                    continue;
+                }
+
+                if metadata.is_file() {
+                    paths.push(path);
+                } else if metadata.is_dir() {
+                    dirs_to_process.push(path);
+                }
+            }
+        }
+
+        Ok(paths)
+    }
+    
     fn should_ignore_path(&self, relative_path: &str, full_path: &Path, patterns: &HashSet<String>) -> bool {
         let file_name = full_path.file_name().unwrap_or_default().to_string_lossy();
 

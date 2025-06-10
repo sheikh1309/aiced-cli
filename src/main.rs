@@ -20,6 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>  {
 
     let analysis = analyzer.analyze_repository().await?;
     analyzer.print_analysis_report(&analysis);
+    // todo - can apply all changes
 
     for (i, change) in analysis.changes.iter().enumerate() {
         analyzer.print_change_report(&change);
