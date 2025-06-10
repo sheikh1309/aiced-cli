@@ -5,13 +5,9 @@ use crate::enums::line_change::LineChange;
 pub struct FileModifier;
 
 impl FileModifier {
-    pub fn apply_file_modifications(
-        repo_path: &str,
-        file_path: &str,
-        changes: &[LineChange]
-    ) -> Result<(), Box<dyn std::error::Error>> {
-
-        let full_path = Path::new(repo_path).join(file_path);
+    pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
+        let str_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
+        let full_path = Path::new(&*str_path);
 
         if !full_path.exists() {
             return Err(format!("File does not exist: {}", full_path.display()).into());
@@ -128,30 +124,20 @@ impl FileModifier {
         }
     }
 
-    pub fn validate_file_modifications(
-        repo_path: &str,
-        file_path: &str,
-        changes: &[LineChange]
-    ) -> Result<(), Box<dyn std::error::Error>> {
-
-        let full_path = Path::new(repo_path).join(file_path);
+    pub fn validate_file_modifications(repo_path: &str, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
+        let full_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let content = fs::read_to_string(&full_path)?;
         let original_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
 
-        // First validate against original file structure
         Self::validate_changes(changes, &original_lines)?;
 
-        // Then simulate the application to catch offset issues
         Self::simulate_changes_application(changes, &original_lines)?;
 
         println!("✅ All {} changes validated for {}", changes.len(), file_path);
         Ok(())
     }
 
-    fn simulate_changes_application(
-        changes: &[LineChange],
-        original_lines: &[String]
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn simulate_changes_application(changes: &[LineChange], original_lines: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
         let mut sorted_changes = changes.to_vec();
         sorted_changes.sort_by_key(|change| Self::get_change_line_number(change));

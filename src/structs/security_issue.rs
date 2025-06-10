@@ -1,6 +1,3 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Deserialize, Serialize)]
 pub struct SecurityIssue {
     pub file_path: String,
     pub line_number: usize,

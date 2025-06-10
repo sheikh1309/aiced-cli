@@ -21,19 +21,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let analysis = analyzer.analyze_repository().await?;
     analyzer.print_analysis_report(&analysis);
 
-    print!("\nApply these changes? (y/N): ");
-    io::stdout().flush()?;
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
+    for (i, change) in analysis.changes.iter().enumerate() {
+        analyzer.print_change_report(&change);
 
-    if input.trim().to_lowercase() == "y" {
-        analyzer.apply_changes(&analysis, false)?;
-        println!("✅ Changes applied successfully!");
-    } else {
-        println!("📋 Dry run - no changes made.");
-        analyzer.apply_changes(&analysis, true)?;
+        print!("\nApply these change? (y/N): ");
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().to_lowercase() == "y" {
+            println!("\n📋 Change {} of {}", i + 1, analysis.changes.len());
+            analyzer.apply_change(&change)?;
+            println!("\n🎉 CHANGE APPLIED SUCCESSFULLY!");
+        } else {
+            println!("📋 no changes made.");
+        }
     }
 
+    // todo - print security issues and performance improvements and apply them
 
     Ok(())
 }

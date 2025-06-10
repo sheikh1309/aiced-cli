@@ -8,9 +8,12 @@ use crate::traits::ai_provider::AiProvider;
 use crate::constants::prompts::SYSTEM_PROMPT;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::ai_providers::anthropic::AnthropicProvider;
+use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
 use crate::structs::analysis_response::AnalysisResponse;
+use crate::structs::performance_improvement::PerformanceImprovement;
+use crate::structs::security_issue::SecurityIssue;
 
 pub struct CodeAnalyzer {
     ai_provider: AnthropicProvider,
@@ -18,8 +21,7 @@ pub struct CodeAnalyzer {
     repo_path: String,
 }
 
-impl CodeAnalyzer
-{
+impl CodeAnalyzer {
     pub fn new( api_key: String, repo_path: String) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             ai_provider: AnthropicProvider::new(api_key),
@@ -42,7 +44,7 @@ impl CodeAnalyzer
         };
 
         fs::write("prompt.txt", &user_prompt.content)
-            .map_err(|e| format!("Failed to write JSON file: {}", e))?;
+            .map_err(|e| format!("Failed to write prompt to file: {}", e))?;
 
         let messages = vec![system_prompt, user_prompt];
 
@@ -51,18 +53,10 @@ impl CodeAnalyzer
         logger.start();
 
         let mut response_text = String::new();
-        let mut stream = match self.ai_provider.generate_completion_stream(&messages).await {
-            Ok(stream) => stream,
-            Err(e) => {
-                logger.error(&format!("Failed to create stream: {}", e)).await;
-                return Err(Box::new(e) as Box<dyn std::error::Error>);
-            }
-        };
-
         let mut last_update = Instant::now();
         let update_interval = Duration::from_millis(150);
+        let mut stream = self.ai_provider.create_stream_request(&messages).await?;
 
-        // todo - get empty responses
         while let Some(result) = stream.next().await {
             if last_update.elapsed() >= update_interval {
                 last_update = Instant::now();
@@ -71,71 +65,43 @@ impl CodeAnalyzer
             match result {
                 Ok(item) => {
                     response_text.push_str(&item.content);
-                    if item.is_complete {
-                        break;
-                    }
-                }
-                Err(e) => return Err(e.into()),
+                },
+                Err(_e) => {},
             }
         }
 
         logger.stop("Analysis complete").await;
         fs::write("response_text.txt", &response_text).map_err(|e| format!("Failed to write Response file: {}", e))?;
-        
-        
-        let clean_response = response_text
-            .trim()
-            .strip_prefix("```json")
-            .unwrap_or(&response_text)
-            .strip_suffix("```")
-            .unwrap_or(&response_text)
-            .trim();
 
-        let analysis: AnalysisResponse = serde_json::from_str(clean_response)
-            .map_err(|e| format!("Failed to parse AI response as JSON: {}", e))?;
+        let mut parser = Parser::new(&response_text);
+        let analysis = parser.parse()
+            .map_err(|e| {
+                fs::write("failed_response.txt", &response_text).ok();
+                format!("Failed to parse custom format: {}", e)
+            })?;
+
 
         Ok(analysis)
     }
 
-    pub fn apply_changes(&self, analysis: &AnalysisResponse, dry_run: bool) -> Result<(), Box<dyn std::error::Error>> {
-        println!("🔧 Applying {} changes...", analysis.changes.len());
-
-        for (i, change) in analysis.changes.iter().enumerate() {
-            println!("\n📋 Change {} of {}", i + 1, analysis.changes.len());
-
-            match change {
-                FileChange::ModifyFile { file_path, reason, severity, line_changes } => {
-                    println!("📝 [{}] Modifying {}: {}", severity, file_path, reason);
-
-                    if dry_run {
-                        println!("   🔍 DRY RUN - Validating {} line changes", line_changes.len());
-                        FileModifier::validate_file_modifications(&self.repo_path, file_path, line_changes)?;
-                        println!("   ✅ All changes validated successfully");
-                    } else {
-                        FileModifier::apply_file_modifications(&self.repo_path, file_path, line_changes)?;
-                    }
-                }
-                FileChange::CreateFile { file_path, reason, severity, content } => {
-                    println!("📁 [{}] Creating {}: {}", severity, file_path, reason);
-                    if !dry_run {
-                        FileModifier::create_file(&self.repo_path, file_path, content)?;
-                    }
-                }
-                FileChange::DeleteFile { file_path, reason, severity } => {
-                    println!("🗑️ [{}] Deleting {}: {}", severity, file_path, reason);
-                    if !dry_run {
-                        FileModifier::delete_file(&self.repo_path, file_path)?;
-                    }
-                }
+    pub fn apply_change(&self, file_change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
+        match file_change {
+            FileChange::ModifyFile { file_path, reason, severity, line_changes } => {
+                println!("📝 [{}] Modifying {}: {}", severity, file_path, reason);
+                println!("   🔍 Validating {} line changes", line_changes.len());
+                FileModifier::validate_file_modifications(&self.repo_path, file_path, line_changes)?;
+                println!("   ✅ All changes validated successfully");
+                FileModifier::apply_file_modifications(&self.repo_path, file_path, line_changes)?;
+            }
+            FileChange::CreateFile { file_path, reason, severity, content } => {
+                println!("📁 [{}] Creating {}: {}", severity, file_path, reason);
+                FileModifier::create_file(&self.repo_path, file_path, content)?;
+            }
+            FileChange::DeleteFile { file_path, reason, severity } => {
+                println!("🗑️ [{}] Deleting {}: {}", severity, file_path, reason);
+                FileModifier::delete_file(&self.repo_path, file_path)?;
             }
         }
-
-        if dry_run {
-            println!("\n✅ DRY RUN COMPLETE - All changes validated successfully!");
-        } else {
-            println!("\n🎉 ALL CHANGES APPLIED SUCCESSFULLY!");
-        }
-
         Ok(())
     }
 
@@ -143,77 +109,38 @@ impl CodeAnalyzer
         println!("🔍 CODE ANALYSIS REPORT");
         println!("======================");
         println!("{}\n", analysis.analysis_summary);
-
-        // Group changes by severity
-        let mut critical = Vec::new();
-        let mut high = Vec::new();
-        let mut medium = Vec::new();
-        let mut low = Vec::new();
-
-        for change in &analysis.changes {
-            let severity = match change {
-                FileChange::ModifyFile { severity, .. } => severity,
-                FileChange::CreateFile { severity, .. } => severity,
-                FileChange::DeleteFile { severity, .. } => severity,
-            };
-
-            match severity.as_str() {
-                "critical" => critical.push(change),
-                "high" => high.push(change),
-                "medium" => medium.push(change),
-                "low" => low.push(change),
-                _ => medium.push(change), // Default to medium
-            }
-        }
-
         println!("🔧 CHANGES REQUIRED ({} total):", analysis.changes.len());
+    }
 
-        if !critical.is_empty() {
-            println!("\n  🚨 CRITICAL ({}):", critical.len());
-            for change in critical {
-                self.print_change_summary(change);
-            }
-        }
-
-        if !high.is_empty() {
-            println!("\n  ⚠️ HIGH ({}):", high.len());
-            for change in high {
-                self.print_change_summary(change);
-            }
-        }
-
-        if !medium.is_empty() {
-            println!("\n  📋 MEDIUM ({}):", medium.len());
-            for change in medium {
-                self.print_change_summary(change);
-            }
-        }
-
-        if !low.is_empty() {
-            println!("\n  💡 LOW ({}):", low.len());
-            for change in low {
-                self.print_change_summary(change);
-            }
-        }
-
-        if !analysis.security_issues.is_empty() {
-            println!("\n🔒 SECURITY ISSUES ({} total):", analysis.security_issues.len());
-            for (i, issue) in analysis.security_issues.iter().enumerate() {
-                println!("  {}. ⚠️ {}:{} [{}]: {}", i+1, issue.file_path, issue.line_number, issue.severity, issue.issue);
-                println!("      💡 {}", issue.recommendation);
-            }
-        }
-
-        if !analysis.performance_improvements.is_empty() {
-            println!("\n⚡ PERFORMANCE IMPROVEMENTS ({} total):", analysis.performance_improvements.len());
-            for (i, improvement) in analysis.performance_improvements.iter().enumerate() {
-                println!("  {}. 🚀 {}:{}: {}", i+1, improvement.file_path, improvement.line_number, improvement.issue);
-                println!("      📈 {}", improvement.impact);
-            }
+    pub fn print_change_report(&self, change: &FileChange) {
+        let severity = match change {
+            FileChange::ModifyFile { severity, .. } => severity,
+            FileChange::CreateFile { severity, .. } => severity,
+            FileChange::DeleteFile { severity, .. } => severity,
+        };
+        match severity.as_str() {
+            "critical" => self.print_change_summary(change, "\n  🚨 CRITICAL"),
+            "high" => self.print_change_summary(change, "\n  ⚠️ HIGH"),
+            "medium" => self.print_change_summary(change, "\n  📋 MEDIUM"),
+            "low" => self.print_change_summary(change, "\n  💡 LOW"),
+            _ => self.print_change_summary(change, "\n  📋 MEDIUM"),
         }
     }
 
-    fn print_change_summary(&self, change: &FileChange) {
+    pub fn print_security_issues_report(&self, security_issue: &SecurityIssue) {
+        println!("\n🔒 SECURITY ISSUE:");
+        println!("  ⚠️ {}:{} [{}]: {}", security_issue.file_path, security_issue.line_number, security_issue.severity, security_issue.issue);
+        println!("      💡 {}", security_issue.recommendation);
+    }
+
+    pub fn print_performance_improvements_report(&self, improvement: &PerformanceImprovement) {
+        println!("\n⚡ PERFORMANCE IMPROVEMENT");
+        println!("  🚀 {}:{}: {}", improvement.file_path, improvement.line_number, improvement.issue);
+        println!("      📈 {}", improvement.impact);
+    }
+
+    fn print_change_summary(&self, change: &FileChange, log_message: &str) {
+        println!("{}", log_message);
         match change {
             FileChange::ModifyFile { file_path, reason, line_changes, .. } => {
                 println!("    📝 {}: {}", file_path, reason);

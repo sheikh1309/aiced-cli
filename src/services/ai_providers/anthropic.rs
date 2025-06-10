@@ -1,6 +1,4 @@
 use crate::structs::message::Message;
-use crate::structs::stream_item::StreamItem;
-use crate::helpers::continuation::run_continuation_task;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -8,9 +6,8 @@ use std::error::Error;
 use std::fmt;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
+use crate::structs::stream_item::StreamItem;
 use crate::traits::ai_provider::AiProvider;
-use futures::TryStreamExt;
-use futures::FutureExt;
 
 #[derive(Serialize)]
 struct Thinking {
@@ -28,24 +25,49 @@ struct MessageRequest {
     thinking: Thinking,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct AnthropicMessage {
     role: String,
     content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct StreamResponse {
-    #[serde(rename = "type")]
-    event_type: String,
-    delta: Option<StreamDelta>,
+    #[serde(flatten)]
+    data: StreamEventData,
 }
 
-#[derive(Deserialize)]
-struct StreamDelta {
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum StreamEventData {
+    ContentBlockDelta {
+        delta: ContentDelta,
+    },
+    MessageDelta {
+        delta: MessageDelta,
+    },
+    Error {
+        error: ApiError,
+    },
+}
+
+#[derive(Deserialize, Debug)]
+struct ContentDelta {
     #[serde(rename = "type")]
+    delta_type: String,
     text: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct MessageDelta {
     stop_reason: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct ApiError {
+    #[serde(rename = "type")]
+    error_type: String,
+    message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -83,7 +105,7 @@ impl AnthropicProvider {
             api_key,
             base_url: "https://api.anthropic.com/v1".to_string(),
             client: Client::new(),
-            model: "claude-opus-4-20250514".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
         }
     }
 
@@ -96,7 +118,7 @@ impl AnthropicProvider {
                     role => role.to_string(),
                 },
                 content: if msg.role == "system" {
-                    format!("System: {}", msg.content)
+                    format!("<system>{}</system>\n\nPlease follow the instructions in the system message above.", msg.content)
                 } else {
                     msg.content.clone()
                 },
@@ -107,28 +129,73 @@ impl AnthropicProvider {
     fn get_request(&self, messages: Vec<AnthropicMessage>, stream: bool) -> MessageRequest {
         MessageRequest {
             model: self.model.clone(),
-            max_tokens: 32000,
-            temperature: Some(1.0),
+            max_tokens: 64000,
+            temperature: Some(1.0), // Set to 0 for more consistent output
             messages,
             stream,
             thinking: Thinking {
-                r#type: "enabled".to_string(),
-                budget_tokens: 31999,
+                r#type: "enabled".to_string(), // Disable thinking for now
+                budget_tokens: 63999,
             },
         }
     }
 
     async fn make_request(&self, url: String, request_body: MessageRequest) -> Result<reqwest::Response, AnthropicError> {
-        self
-            .client
+        println!("🔍 Making request to: {}", url);
+        println!("📦 Request model: {}", request_body.model);
+
+        self.client
             .post(&url)
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream") // Important for SSE
             .json(&request_body)
             .send()
             .await
             .map_err(|e| AnthropicError::NetworkError(e.to_string()))
+    }
+
+    fn parse_sse_line(line: &str) -> Option<Result<StreamItem, AnthropicError>> {
+        if line.is_empty() || !line.starts_with("data: ") {
+            return None;
+        }
+
+        let data = &line[6..];
+
+        if data.trim() == "[DONE]" {
+            return None;
+        }
+
+        match serde_json::from_str::<StreamResponse>(data) {
+            Ok(response) => {
+                let item = match response.data {
+                    StreamEventData::ContentBlockDelta { delta, .. } => {
+                        if delta.delta_type == "text_delta" {
+                            StreamItem::new(delta.text.unwrap_or_default())
+                        } else {
+                            StreamItem::new(String::new())
+                        }
+                    }
+                    StreamEventData::MessageDelta { delta, .. } => {
+                        if let Some(stop_reason) = delta.stop_reason {
+                            StreamItem::complete(String::new(), Some(stop_reason))
+                        } else {
+                            StreamItem::new(String::new())
+                        }
+                    }
+                    StreamEventData::Error { error } => {
+                        return Some(Err(AnthropicError::ApiError(
+                            format!("{}: {}", error.error_type, error.message)
+                        )));
+                    }
+                };
+                Some(Ok(item))
+            }
+            Err(e) => {
+                Some(Err(AnthropicError::SerializationError(format!("Failed to parse event: {}", e))))
+            }
+        }
     }
 }
 
@@ -136,23 +203,14 @@ impl AnthropicProvider {
 impl AiProvider for AnthropicProvider {
     type Error = AnthropicError;
 
-    async fn generate_completion_stream(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, Self::Error>> + Send>>, Self::Error> {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        let messages = messages.to_vec();
-        let provider = self.clone();
-
-        tokio::spawn(async move {
-            run_continuation_task(provider, messages, tx).await;
-        });
-
-        Ok(Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx)))
-    }
-
     async fn create_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
         let url = format!("{}/messages", self.base_url);
         let anthropic_messages = self.get_anthropic_messages(messages);
         let request_body = self.get_request(anthropic_messages, true);
+
         let response = self.make_request(url, request_body).await?;
+
+        println!("📡 Response status: {}", response.status());
 
         if !response.status().is_success() {
             let status = response.status();
@@ -161,72 +219,37 @@ impl AiProvider for AnthropicProvider {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
+            eprintln!("❌ API Error Response: {}", error_text);
+
             return Err(match status.as_u16() {
                 401 => AnthropicError::AuthenticationError(error_text),
                 _ => AnthropicError::ApiError(format!("HTTP {}: {}", status, error_text)),
             });
         }
 
+        // Create a stream that properly handles SSE format
         let stream = response
             .bytes_stream()
-            .map_err(|e| AnthropicError::NetworkError(e.to_string()))
-            .fold(String::new(), |mut buffer, chunk_result| async move {
+            .map(move |chunk_result| {
                 match chunk_result {
-                    Ok(chunk) => {
-                        buffer.push_str(&String::from_utf8_lossy(&chunk));
-                        buffer
+                    Ok(bytes) => {
+                        let text = String::from_utf8_lossy(&bytes);
+
+                        // Split by newlines and process each line
+                        let items: Vec<Result<StreamItem, AnthropicError>> = text
+                            .lines()
+                            .filter_map(|line| Self::parse_sse_line(line))
+                            .collect();
+
+                        futures::stream::iter(items)
                     }
-                    Err(_) => buffer,
+                    Err(e) => {
+                        let error = AnthropicError::NetworkError(format!("Stream error: {}", e));
+                        futures::stream::iter(vec![Err(error)])
+                    }
                 }
             })
-            .map(|complete_data| {
-                let items: Vec<Result<StreamItem, AnthropicError>> = complete_data
-                    .lines()
-                    .filter(|line| line.starts_with("data: "))
-                    .map(|line| &line[6..])
-                    .filter(|line| *line != "[DONE]")
-                    .map(|line| {
-                        serde_json::from_str::<StreamResponse>(line)
-                            .map_err(|e| AnthropicError::SerializationError(e.to_string()))
-                            .and_then(|response| {
-                                match response.event_type.as_str() {
-                                    "content_block_delta" => {
-                                        if let Some(delta) = response.delta {
-                                            let content = delta.text.unwrap_or_default();
-                                            let finish_reason = delta.stop_reason;
-                                            if finish_reason.is_some() {
-                                                Ok(StreamItem::complete(content, finish_reason))
-                                            } else {
-                                                Ok(StreamItem::new(content))
-                                            }
-                                        } else {
-                                            Ok(StreamItem::new("".to_string()))
-                                        }
-                                    },
-                                    "message_delta" => {
-                                        if let Some(delta) = response.delta {
-                                            let finish_reason = delta.stop_reason;
-                                            if finish_reason.is_some() {
-                                                Ok(StreamItem::complete("".to_string(), finish_reason))
-                                            } else {
-                                                Ok(StreamItem::new("".to_string()))
-                                            }
-                                        } else {
-                                            Ok(StreamItem::new("".to_string()))
-                                        }
-                                    },
-                                    "message_start" | "content_block_start" | "content_block_stop" | "message_stop" => {
-                                        Ok(StreamItem::new("".to_string()))
-                                    },
-                                    _ => Ok(StreamItem::new("".to_string()))
-                                }
-                            })
-                    })
-                    .collect();
-
-                futures::stream::iter(items)
-            })
-            .flatten_stream();
+            .flatten();
 
         Ok(Box::pin(stream))
     }

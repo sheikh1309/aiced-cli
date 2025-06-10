@@ -60,17 +60,4 @@ impl AnimatedLogger {
         eprint!("\r\x1b[K✅  {}\n", final_message);
         std::io::stderr().flush().unwrap();
     }
-
-    pub async fn error(&mut self, error_message: &str) {
-        if let Some(sender) = self.stop_sender.take() {
-            let _ = sender.send(());
-        }
-
-        if let Some(handle) = self.task_handle.take() {
-            let _ = handle.await;
-        }
-
-        eprint!("\r\x1b[K❌ {}\n", error_message);
-        std::io::stderr().flush().unwrap();
-    }
 }
