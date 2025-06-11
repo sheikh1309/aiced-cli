@@ -11,9 +11,10 @@ mod logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    let anthropic_token: String = String::from("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");
+    let anthropic_token = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY environment variable must be set");
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "default_path".to_string());
-    let repo_path = format!("{}/Projects/creator/creator-api-websites", home_dir);
+    // let repo_path = format!("{}/Projects/creator/creator-api-websites", home_dir);
+    let repo_path = format!("{}/Projects/rust/codesentry", home_dir);
     println!("Analyzing project at: {}\n", repo_path);
 
     let analyzer = CodeAnalyzer::new(anthropic_token, repo_path)?;

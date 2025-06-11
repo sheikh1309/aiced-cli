@@ -24,7 +24,7 @@ pub struct CodeAnalyzer {
 }
 
 impl CodeAnalyzer {
-    pub fn new( api_key: String, repo_path: String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(api_key: String, repo_path: String) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             ai_provider: AnthropicProvider::new(api_key, Arc::new(ApiRateLimiter::new())),
             repo_scanner: RepoScanner::new(repo_path.clone()),
@@ -44,9 +44,10 @@ impl CodeAnalyzer {
             role: "user".to_string(),
             content: prompt_generator::generate_prompt(files, &self.repo_path),
         };
-
-        fs::write("prompt.txt", &user_prompt.content)
-            .map_err(|e| format!("Failed to write prompt to file: {}", e))?;
+        
+        if let Err(e) = fs::write("prompt.txt", &user_prompt.content) {
+            eprintln!("Warning: Failed to write prompt to file: {}", e);
+        }
 
         let messages = vec![system_prompt, user_prompt];
 

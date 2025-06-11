@@ -11,9 +11,13 @@ pub struct RepoScanner {
 
 impl RepoScanner {
     pub fn new(repo_path: String) -> Self {
+        Self::with_concurrency(repo_path, 10)
+    }
+
+    pub fn with_concurrency(repo_path: String, max_concurrent_reads: usize) -> Self {
         Self { 
             repo_path,
-            max_concurrent_reads: 10,
+            max_concurrent_reads,
         }
     }
 
