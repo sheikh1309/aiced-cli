@@ -51,15 +51,6 @@ impl RepoScanner {
 
             patterns.extend(gitignore_patterns);
         }
-        
-        
-        // todo - remove
-        patterns.insert(String::from("test/"));
-        patterns.insert(String::from("dist/"));
-        patterns.insert(String::from("messages/"));
-        patterns.insert(String::from(".vscode/"));
-        patterns.insert(String::from("yarn.lock"));
-
         Ok(patterns)
     }
 
@@ -156,6 +147,27 @@ impl RepoScanner {
     }
 
     fn matches_gitignore_pattern(&self, relative_path: &str, file_name: &str, full_path: &Path, pattern: &str) -> bool {
+        // Handle root-relative patterns starting with /
+        if pattern.starts_with('/') {
+            let root_pattern = &pattern[1..]; // Remove leading /
+
+            // For root-relative patterns, only match at the root level
+            if root_pattern.ends_with('/') {
+                // Directory pattern like "/target/"
+                let dir_pattern = &root_pattern[..root_pattern.len()-1];
+                if full_path.is_dir() {
+                    // Check if this is a top-level directory
+                    let path_components: Vec<&str> = relative_path.split('/').collect();
+                    return path_components.len() == 1 && self.matches_glob(&path_components[0], dir_pattern);
+                }
+                return false;
+            } else {
+                // File or directory pattern like "/target" or "/Cargo.lock"
+                let path_components: Vec<&str> = relative_path.split('/').collect();
+                return path_components.len() == 1 && self.matches_glob(&path_components[0], root_pattern);
+            }
+        }
+
         // Directory patterns ending with /
         if pattern.ends_with('/') {
             let dir_pattern = &pattern[..pattern.len()-1];

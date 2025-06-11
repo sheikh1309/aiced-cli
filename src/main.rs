@@ -13,8 +13,10 @@ mod logger;
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let anthropic_token = std::env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY environment variable must be set");
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "default_path".to_string());
-    // let repo_path = format!("{}/Projects/creator/creator-api-websites", home_dir);
-    let repo_path = format!("{}/Projects/rust/codesentry", home_dir);
+    // todo - get from .toml file
+    let repo_path = std::env::var("REPO_PATH")
+        .unwrap_or_else(|_| format!("{}/Projects/creator/creator-api-websites", home_dir));
+
     println!("Analyzing project at: {}\n", repo_path);
 
     let analyzer = CodeAnalyzer::new(anthropic_token, repo_path)?;
@@ -22,11 +24,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let analysis = analyzer.analyze_repository().await?;
     analyzer.print_analysis_report(&analysis);
     // todo - can apply all changes
-
+    
     for (i, change) in analysis.changes.iter().enumerate() {
         analyzer.print_change_report(&change);
 
-        print!("\nApply these change? (y/N): ");
+        print!("\nApply this change? (y/N): ");
         io::stdout().flush()?;
 
         let mut input = String::new();

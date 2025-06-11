@@ -1,5 +1,7 @@
 use crate::enums::line_change::LineChange;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FileChange {
     ModifyFile {
         file_path: String,

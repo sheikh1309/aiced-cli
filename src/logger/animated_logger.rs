@@ -34,7 +34,7 @@ impl AnimatedLogger {
                 tokio::select! {
                     _ = interval.tick() => {
                         eprint!("\r{} {} ", message, animation_chars[frame]);
-                        std::io::stderr().flush().unwrap();
+                        let _ = std::io::stderr().flush();
                         frame = (frame + 1) % animation_chars.len();
                     }
                     _ = stop_rx.recv() => {
@@ -58,6 +58,6 @@ impl AnimatedLogger {
         }
 
         eprint!("\r\x1b[K✅  {}\n", final_message);
-        std::io::stderr().flush().unwrap();
+        let _ = std::io::stderr().flush();
     }
 }

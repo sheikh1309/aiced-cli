@@ -208,7 +208,7 @@ impl AiProvider for AnthropicProvider {
     type Error = AnthropicError;
 
     async fn create_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
-        let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::NetworkError(format!("Rate limit error: {}", e)))?;
+        let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::ApiError(format!("Rate limit error: {}", e)))?;
         println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
 
         let url = format!("{}/messages", self.base_url);
