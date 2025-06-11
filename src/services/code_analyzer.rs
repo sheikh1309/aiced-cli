@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use futures::StreamExt;
 use crate::structs::message::Message;
@@ -11,6 +12,7 @@ use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
+use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::performance_improvement::PerformanceImprovement;
 use crate::structs::security_issue::SecurityIssue;
@@ -24,7 +26,7 @@ pub struct CodeAnalyzer {
 impl CodeAnalyzer {
     pub fn new( api_key: String, repo_path: String) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
-            ai_provider: AnthropicProvider::new(api_key),
+            ai_provider: AnthropicProvider::new(api_key, Arc::new(ApiRateLimiter::new())),
             repo_scanner: RepoScanner::new(repo_path.clone()),
             repo_path,
         })

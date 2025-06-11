@@ -3,3 +3,4 @@ pub mod code_analyzer;
 pub mod repo_scanner;
 mod file_modifier;
 mod custom_parser;
+mod rate_limiter;

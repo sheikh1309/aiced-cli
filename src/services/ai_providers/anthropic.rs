@@ -6,6 +6,8 @@ use std::error::Error;
 use std::fmt;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
+use std::sync::Arc;
+use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::stream_item::StreamItem;
 use crate::traits::ai_provider::AiProvider;
 
@@ -97,15 +99,17 @@ pub struct AnthropicProvider {
     base_url: String,
     client: Client,
     model: String,
+    rate_limiter: Arc<ApiRateLimiter>,
 }
 
 impl AnthropicProvider {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, rate_limiter: Arc<ApiRateLimiter>) -> Self {
         Self {
             api_key,
             base_url: "https://api.anthropic.com/v1".to_string(),
             client: Client::new(),
             model: "claude-sonnet-4-20250514".to_string(),
+            rate_limiter,
         }
     }
 
@@ -204,6 +208,9 @@ impl AiProvider for AnthropicProvider {
     type Error = AnthropicError;
 
     async fn create_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
+        let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::NetworkError(format!("Rate limit error: {}", e)))?;
+        println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
+
         let url = format!("{}/messages", self.base_url);
         let anthropic_messages = self.get_anthropic_messages(messages);
         let request_body = self.get_request(anthropic_messages, true);
