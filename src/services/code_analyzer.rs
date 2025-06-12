@@ -216,7 +216,7 @@ impl CodeAnalyzer {
         match change {
             FileChange::ModifyFile { file_path, reason, line_changes, .. } => {
                 println!("    📝 {}", file_path);
-                println!("    ❔ {}", reason);
+                println!("    ❔  {}", reason);
                 println!("    {} line changes", line_changes.len());
                 self.print_diff_preview(file_path, line_changes)?;
             }
