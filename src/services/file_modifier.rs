@@ -16,9 +16,6 @@ impl FileModifier {
         let content = fs::read_to_string(&full_path)?;
         let original_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
 
-        println!("📁 Applying {} changes to {}", changes.len(), file_path);
-        println!("📊 Original file has {} lines", original_lines.len());
-
         let validated_changes = Self::validate_changes(changes, &original_lines)?;
 
         let mut sorted_changes = validated_changes;
@@ -27,13 +24,9 @@ impl FileModifier {
         let mut lines = original_lines.clone();
         let mut cumulative_offset: i32 = 0; // Track total line offset
 
-        for (i, change) in sorted_changes.iter().enumerate() {
-            println!("🔧 Applying change {} of {}", i + 1, sorted_changes.len());
+        for (_, change) in sorted_changes.iter().enumerate() {
 
             let adjusted_change = Self::adjust_change_line_numbers(change, cumulative_offset);
-
-            println!("📍 Original change: {:?}", change);
-            println!("📍 Adjusted change: {:?}", adjusted_change);
 
             let line_offset = match &adjusted_change {
                 LineChange::Replace { line_number, old_content, new_content } => {
@@ -61,15 +54,10 @@ impl FileModifier {
             };
 
             cumulative_offset += line_offset;
-
-            println!("   📊 Line offset from this change: {}", line_offset);
-            println!("   📊 Cumulative offset: {}", cumulative_offset);
-            println!("   ✅ Applied. File now has {} lines", lines.len());
         }
 
         let new_content = lines.join("\n");
         fs::write(&full_path, new_content)?;
-        println!("✅ File {} successfully modified", file_path);
 
         Ok(())
     }
@@ -133,7 +121,6 @@ impl FileModifier {
 
         Self::simulate_changes_application(changes, &original_lines)?;
 
-        println!("✅ All {} changes validated for {}", changes.len(), file_path);
         Ok(())
     }
 
@@ -197,9 +184,6 @@ impl FileModifier {
 
             cumulative_offset += line_offset;
             simulated_line_count = (simulated_line_count as i32 + line_offset) as usize;
-
-            println!("   🧪 Simulation step {}: offset={}, new_line_count={}",
-                     i + 1, line_offset, simulated_line_count);
         }
 
         Ok(())
@@ -211,7 +195,6 @@ impl FileModifier {
         for (i, change) in changes.iter().enumerate() {
             match Self::validate_single_change(change, lines) {
                 Ok(validated) => {
-                    println!("   ✅ Change {} validated against original file", i + 1);
                     validated_changes.push(validated);
                 }
                 Err(e) => {
@@ -302,7 +285,6 @@ impl FileModifier {
         }
 
         let index = line_number - 1;
-        println!("     🔄 Line {}: '{}' → '{}'", line_number, lines[index].trim(), new_content.trim());
         lines[index] = new_content.to_string();
         Ok(())
     }
@@ -312,7 +294,6 @@ impl FileModifier {
             return Err(format!("Line number {} out of range", line_number));
         }
 
-        println!("     ➕ After line {}: '{}'", line_number, new_content.trim());
         lines.insert(line_number, new_content.to_string());
         Ok(())
     }
@@ -323,7 +304,6 @@ impl FileModifier {
         }
 
         let index = line_number - 1;
-        println!("     ➕ Before line {}: '{}'", line_number, new_content.trim());
         lines.insert(index, new_content.to_string());
         Ok(())
     }
@@ -334,7 +314,6 @@ impl FileModifier {
         }
 
         let index = line_number - 1;
-        println!("     ❌ Delete line {}: '{}'", line_number, lines[index].trim());
         lines.remove(index);
         Ok(())
     }
@@ -352,9 +331,6 @@ impl FileModifier {
 
         let start_index = start_line - 1;
         let end_index = end_line - 1;
-
-        println!("     🔄 Replace lines {}-{} ({} lines) → {} lines",
-                 start_line, end_line, end_line - start_line + 1, new_content.len());
 
         for _ in start_index..=end_index {
             lines.remove(start_index);
@@ -375,7 +351,6 @@ impl FileModifier {
         }
 
         fs::write(&full_path, content)?;
-        println!("✅ Created file: {}", file_path);
         Ok(())
     }
 
@@ -383,9 +358,6 @@ impl FileModifier {
         let full_path = Path::new(repo_path).join(file_path);
         if full_path.exists() {
             fs::remove_file(&full_path)?;
-            println!("✅ Deleted file: {}", file_path);
-        } else {
-            println!("⚠️ File already deleted: {}", file_path);
         }
         Ok(())
     }

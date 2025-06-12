@@ -1,21 +1,31 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::fs;
 use futures::{stream, StreamExt};
+use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
+use crate::helpers::prompt_generator;
+use crate::logger::animated_logger::AnimatedLogger;
+use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::structs::file_info::FileInfo;
+use crate::structs::message::Message;
+use crate::traits::ai_provider::AiProvider;
 
 pub struct RepoScanner {
+    ai_provider: Arc<AnthropicProvider>,
     repo_path: String,
     max_concurrent_reads: usize,
 }
 
 impl RepoScanner {
-    pub fn new(repo_path: String) -> Self {
-        Self::with_concurrency(repo_path, 10)
+    pub fn new(ai_provider: Arc<AnthropicProvider>, repo_path: String) -> Self {
+        Self::with_concurrency(ai_provider, repo_path, 10)
     }
 
-    pub fn with_concurrency(repo_path: String, max_concurrent_reads: usize) -> Self {
-        Self { 
+    pub fn with_concurrency(ai_provider: Arc<AnthropicProvider>, repo_path: String, max_concurrent_reads: usize) -> Self {
+        Self {
+            ai_provider,
             repo_path,
             max_concurrent_reads,
         }
@@ -36,33 +46,12 @@ impl RepoScanner {
         image_extensions.into_iter().map(String::from).collect()
     }
 
-    async fn load_gitignore(&self, repo_path: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
-        let gitignore_path = format!("{}/.gitignore", repo_path);
-        let mut patterns = self.get_default_image_patterns();
-        patterns.insert(String::from(".git/"));
-
-        if let Ok(content) = fs::read_to_string(gitignore_path).await {
-            let gitignore_patterns: HashSet<String> = content
-                .lines()
-                .map(|line| line.trim())
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(|line| line.to_string())
-                .collect();
-
-            patterns.extend(gitignore_patterns);
-        }
-        Ok(patterns)
-    }
-
     pub async fn scan_files_async(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
         let patterns = self.load_gitignore(&self.repo_path).await?;
 
-        // First, collect all file paths
-        let file_paths = self.collect_file_paths_async(Path::new(&self.repo_path), &patterns).await?;
-
+        let file_paths = self.get_files_to_send(&patterns).await?;
         println!("📁 Found {} files to analyze", file_paths.len());
 
-        // Process files concurrently with progress tracking
         let total_files = file_paths.len();
         let mut processed = 0;
 
@@ -95,11 +84,90 @@ impl RepoScanner {
             .collect()
             .await;
 
-        println!("✅ Processed {} files successfully", files.len());
+        println!("✅  Processed {} files successfully", files.len());
         Ok(files)
     }
 
-    async fn collect_file_paths_async(&self, dir: &Path, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    async fn get_files_to_send(&self, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        let repo_files_paths = self.collect_file_paths(Path::new(&self.repo_path), &patterns).await?;
+        let system_prompt = Message {
+            role: "system".to_string(),
+            content: FILE_FILTER_SYSTEM_PROMPT.to_string(),
+        };
+
+        let user_prompt = Message {
+            role: "user".to_string(),
+            content: prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repo_path),
+        };
+
+        let messages = vec![system_prompt, user_prompt];
+
+        let mut logger = AnimatedLogger::new("File Filtering".to_string());
+        logger.start();
+
+        let mut response_text = String::new();
+        let mut last_update = Instant::now();
+        let update_interval = Duration::from_millis(150);
+        let mut stream = self.ai_provider.trigger_stream_request(&messages).await?;
+
+        while let Some(result) = stream.next().await {
+            if last_update.elapsed() >= update_interval {
+                last_update = Instant::now();
+            }
+
+            match result {
+                Ok(item) => {
+                    response_text.push_str(&item.content);
+                },
+                Err(_e) => {},
+            }
+        }
+        
+        logger.stop("File Filtering complete").await;
+
+        let clean_response = response_text
+            .replace("```json", "")
+            .replace("```", "")
+            .trim()
+            .to_string();
+
+        let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(&clean_response)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to parse JSON response: {}", e);
+                eprintln!("Response was: {}", clean_response);
+                Vec::new()
+            })
+            .into_iter()
+            .map(|file_path| {
+                let str_path = format!("{}/{}", &self.repo_path, file_path).replace("//", "/");
+                PathBuf::from(str_path)
+            })
+            .collect();
+        
+        // todo - save this as cache - also find solution if user add new files
+
+        Ok(filtered_files_paths)
+    }
+
+    async fn load_gitignore(&self, repo_path: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+        let gitignore_path = format!("{}/.gitignore", repo_path);
+        let mut patterns = self.get_default_image_patterns();
+        patterns.insert(String::from(".git/"));
+
+        if let Ok(content) = fs::read_to_string(gitignore_path).await {
+            let gitignore_patterns: HashSet<String> = content
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(|line| line.to_string())
+                .collect();
+
+            patterns.extend(gitignore_patterns);
+        }
+        Ok(patterns)
+    }
+
+    async fn collect_file_paths(&self, dir: &Path, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
         let mut paths = Vec::new();
         let mut dirs_to_process = vec![dir.to_path_buf()];
 

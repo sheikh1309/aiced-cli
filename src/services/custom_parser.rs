@@ -24,12 +24,8 @@ impl Parser {
             performance_improvements: Vec::new(),
         };
 
-        println!("🔍 Starting parse of {} lines", self.lines.len());
-
         response.analysis_summary = self.parse_summary()?;
-        println!("✅ Parsed summary: {} chars", response.analysis_summary.len());
 
-        let mut change_count = 0;
         while self.current < self.lines.len() {
             if self.current_line().trim().is_empty() {
                 self.current += 1;
@@ -37,12 +33,9 @@ impl Parser {
             }
 
             if self.current_line().starts_with("CHANGE:") {
-                println!("📋 Parsing change #{} at line {}", change_count + 1, self.current + 1);
                 match self.parse_change() {
                     Ok(change) => {
                         response.changes.push(change);
-                        change_count += 1;
-                        println!("✅ Successfully parsed change #{}", change_count);
                     }
                     Err(e) => {
                         eprintln!("❌ Error parsing change at line {}: {}", self.current + 1, e);
@@ -55,7 +48,6 @@ impl Parser {
             }
         }
 
-        println!("✅ Parsed {} changes total", change_count);
         Ok(response)
     }
 
@@ -170,8 +162,6 @@ impl Parser {
 
     fn parse_line_action(&mut self) -> Result<LineChange, String> {
         let action_type = self.parse_field("ACTION:")?;
-
-        println!("  🔧 Parsing action: {} at line {}", action_type, self.current);
 
         match action_type.as_str() {
             "replace" => {

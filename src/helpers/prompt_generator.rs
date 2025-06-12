@@ -1,6 +1,7 @@
+use std::path::PathBuf;
 use crate::structs::file_info::FileInfo;
 
-pub fn generate_prompt(files: Vec<FileInfo>, repo_path: &str) -> String {
+pub fn generate_analysis_user_prompt(files: Vec<FileInfo>, repo_path: &str) -> String {
     let estimated_size = files.iter().map(|f| f.content.len() * 2).sum::<usize>();
     let mut prompt = String::with_capacity(estimated_size);
     
@@ -26,5 +27,18 @@ pub fn generate_prompt(files: Vec<FileInfo>, repo_path: &str) -> String {
     }
 
     prompt.push_str("CRITICAL: Use EXACT line numbers from above. If you reference line 562, ensure it exists in the file.\n");
+    prompt
+}
+
+pub fn generate_file_filter_user_prompt(file_paths: &Vec<PathBuf>, repo_path: &str) -> String {
+    let mut prompt = String::from("Here are the file paths to filter: \n```json\n[\n");
+
+    for file in file_paths {
+        let path = &file.display().to_string().replace(repo_path, "");
+        prompt.push_str(&path);
+        prompt.push_str(",\n");
+    }
+
+    prompt.push(']');
     prompt
 }

@@ -8,6 +8,6 @@ use crate::structs::stream_item::StreamItem;
 pub trait AiProvider {
     type Error: std::error::Error + Send + Sync + 'static;
 
-    async fn create_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, Self::Error>> + Send>>, Self::Error>;
+    async fn trigger_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, Self::Error>> + Send>>, Self::Error>;
     
 }

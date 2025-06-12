@@ -134,7 +134,7 @@ impl AnthropicProvider {
         MessageRequest {
             model: self.model.clone(),
             max_tokens: 64000,
-            temperature: Some(1.0), // Set to 0 for more consistent output
+            temperature: Some(1.0),
             messages,
             stream,
             thinking: Thinking {
@@ -145,7 +145,6 @@ impl AnthropicProvider {
     }
 
     async fn make_request(&self, url: String, request_body: MessageRequest) -> Result<reqwest::Response, AnthropicError> {
-        println!("🔍 Making request to: {}", url);
         println!("📦 Request model: {}", request_body.model);
 
         self.client
@@ -207,7 +206,7 @@ impl AnthropicProvider {
 impl AiProvider for AnthropicProvider {
     type Error = AnthropicError;
 
-    async fn create_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
+    async fn trigger_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
         let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::ApiError(format!("Rate limit error: {}", e)))?;
         println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
 
@@ -216,8 +215,6 @@ impl AiProvider for AnthropicProvider {
         let request_body = self.get_request(anthropic_messages, true);
 
         let response = self.make_request(url, request_body).await?;
-
-        println!("📡 Response status: {}", response.status());
 
         if !response.status().is_success() {
             let status = response.status();
@@ -234,7 +231,6 @@ impl AiProvider for AnthropicProvider {
             });
         }
 
-        // Create a stream that properly handles SSE format
         let stream = response
             .bytes_stream()
             .map(move |chunk_result| {

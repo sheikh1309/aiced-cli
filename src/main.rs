@@ -6,7 +6,7 @@ mod services;
 mod helpers;
 mod traits;
 mod enums;
-mod constants;
+mod prompts;
 mod logger;
 
 #[tokio::main]
@@ -16,34 +16,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     // todo - get from .toml file
     let repo_path = std::env::var("REPO_PATH")
         .unwrap_or_else(|_| format!("{}/Projects/creator/creator-api-websites", home_dir));
-
+    
     println!("Analyzing project at: {}\n", repo_path);
-
+    
     let analyzer = CodeAnalyzer::new(anthropic_token, repo_path)?;
-
+    // todo - sometimes ai return empty
     let analysis = analyzer.analyze_repository().await?;
     analyzer.print_analysis_report(&analysis);
     // todo - can apply all changes
+    println!("security_issues {:?}", &analysis.security_issues);
+    println!("performance_improvements {:?}", &analysis.performance_improvements);
     
-    for (i, change) in analysis.changes.iter().enumerate() {
-        analyzer.print_change_report(&change);
-
+    for (_, change) in analysis.changes.iter().enumerate() {
+        analyzer.print_change_report(&change)?;
+    
         print!("\nApply this change? (y/N): ");
         io::stdout().flush()?;
-
+    
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-
+    
         if input.trim().to_lowercase() == "y" {
-            println!("\n📋 Change {} of {}", i + 1, analysis.changes.len());
             analyzer.apply_change(&change)?;
-            println!("\n🎉 CHANGE APPLIED SUCCESSFULLY!");
-        } else {
-            println!("📋 no changes made.");
         }
     }
-
+    
     // todo - print security issues and performance improvements and apply them
-
+    
     Ok(())
+    
 }
