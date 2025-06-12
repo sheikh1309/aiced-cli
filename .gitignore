@@ -1,7 +1,3 @@
-/target
+target/
 Cargo.lock
-failed_response.txt
-parsed_analysis.json
-prompt.txt
-response_text.txt
 .idea/
