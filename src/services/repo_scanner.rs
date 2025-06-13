@@ -9,23 +9,22 @@ use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::anthropic::AnthropicProvider;
 use crate::structs::config::config::Config;
+use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::message::Message;
 
 pub struct RepoScanner {
     anthropic_provider: Arc<AnthropicProvider>,
-    repo_path: String,
+    repository_config: Arc<RepositoryConfig>,
     max_concurrent_reads: usize,
-    config: Config
 }
 
 impl RepoScanner {
-    pub fn new(anthropic_provider: Arc<AnthropicProvider>, repo_path: String, config: &Config) -> Self {
+    pub fn new(anthropic_provider: Arc<AnthropicProvider>, repository_config: Arc<RepositoryConfig>) -> Self {
         Self {
             anthropic_provider,
-            repo_path,
-            max_concurrent_reads: 10,
-            config: config.clone(),
+            repository_config,
+            max_concurrent_reads: 10
         }
     }
 
@@ -44,8 +43,21 @@ impl RepoScanner {
         image_extensions.into_iter().map(String::from).collect()
     }
 
-    pub async fn scan_files_async(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
-        let patterns = self.load_gitignore(&self.repo_path).await?;
+    pub async fn scan_files(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
+        
+        // todo contion this
+        let repo_config_file = format!("ailyzer/{}.toml", self.repository_config.name);
+        let config_locations = dirs::home_dir().map(|d| d.join(repo_config_file)).unwrap_or_default();
+        if !config_locations.exists() {
+            std::fs::write(&config_locations, "")?;
+        }
+
+        println!("📋 Loading config from: {}", config_locations.display());
+        let content = std::fs::read_to_string(&config_locations)?;
+        let config: Config = toml::from_str(&content)?;
+        
+        
+        let patterns = self.load_gitignore(&self.repository_config.path).await?;
 
         let file_paths = self.get_files_to_send(&patterns).await?;
         println!("📁 Found {} files to analyze", file_paths.len());
@@ -87,7 +99,7 @@ impl RepoScanner {
     }
 
     async fn get_files_to_send(&self, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        let repo_files_paths = self.collect_file_paths(Path::new(&self.repo_path), &patterns).await?;
+        let repo_files_paths = self.collect_file_paths(Path::new(&self.repository_config.path), &patterns).await?;
         let system_prompt = Message {
             role: "system".to_string(),
             content: FILE_FILTER_SYSTEM_PROMPT.to_string(),
@@ -95,7 +107,7 @@ impl RepoScanner {
 
         let user_prompt = Message {
             role: "user".to_string(),
-            content: prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repo_path),
+            content: prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repository_config.path),
         };
 
         let messages = vec![system_prompt, user_prompt];
@@ -137,7 +149,7 @@ impl RepoScanner {
             })
             .into_iter()
             .map(|file_path| {
-                let str_path = format!("{}/{}", &self.repo_path, file_path).replace("//", "/");
+                let str_path = format!("{}/{}", &self.repository_config.path, file_path).replace("//", "/");
                 PathBuf::from(str_path)
             })
             .collect();
@@ -176,7 +188,7 @@ impl RepoScanner {
                 let path = entry.path();
                 let metadata = entry.metadata().await?;
 
-                let relative_path = path.strip_prefix(&self.repo_path)
+                let relative_path = path.strip_prefix(&self.repository_config.path)
                     .unwrap_or(&path)
                     .to_string_lossy()
                     .to_string();

@@ -7,3 +7,4 @@ pub mod analysis_response;
 pub mod config;
 pub mod cli;
 pub mod analysis_result;
+pub mod analyze_repository_response;

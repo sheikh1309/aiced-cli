@@ -16,7 +16,7 @@ pub struct NotificationConfig {
     pub webhook: Option<WebhookConfig>,
 
     #[serde(default)]
-    pub on_critical_only: bool,
+    pub enabled: bool,
 
     #[serde(default)]
     pub summary_report: bool,

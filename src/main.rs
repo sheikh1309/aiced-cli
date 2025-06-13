@@ -14,5 +14,6 @@ mod workers;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    CommandRunner::run_command(cli.command).await
+    let command_runner = CommandRunner::new();
+    command_runner.run_command(cli.command).await
 }

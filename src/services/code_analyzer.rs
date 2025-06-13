@@ -1,4 +1,5 @@
 use std::fs;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use futures::StreamExt;
@@ -14,29 +15,30 @@ use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
 use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::analysis_response::AnalysisResponse;
-use crate::structs::config::config::Config;
+use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
+use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::performance_improvement::PerformanceImprovement;
 use crate::structs::security_issue::SecurityIssue;
 
 pub struct CodeAnalyzer {
     anthropic_provider: Arc<AnthropicProvider>,
     repo_scanner: RepoScanner,
-    repo_path: String,
+    repository_config: Arc<RepositoryConfig>,
 }
 
 impl CodeAnalyzer {
-    
-    pub fn new(api_key: String, repo_path: String, config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
+
+    pub fn new(api_key: String, repository_config: Arc<RepositoryConfig>) -> Result<Self, Box<dyn std::error::Error>> {
         let anthropic_provider = Arc::new(AnthropicProvider::new(api_key.clone(), Arc::new(ApiRateLimiter::new())));
         Ok(Self {
-            anthropic_provider: anthropic_provider.clone(),
-            repo_scanner: RepoScanner::new(anthropic_provider, repo_path.clone(), config),
-            repo_path,
+            anthropic_provider: Arc::clone(&anthropic_provider),
+            repo_scanner: RepoScanner::new(anthropic_provider, Arc::clone(&repository_config)),
+            repository_config,
         })
     }
 
-    pub async fn analyze_repository(&self) -> Result<AnalysisResponse, Box<dyn std::error::Error>> {
-        let files = self.repo_scanner.scan_files_async().await?;
+    pub async fn analyze_repository(&self) -> Result<Rc<AnalyzeRepositoryResponse>, Box<dyn std::error::Error>> {
+        let files = self.repo_scanner.scan_files().await?;
 
         let system_prompt = Message {
             role: "system".to_string(),
@@ -45,7 +47,7 @@ impl CodeAnalyzer {
 
         let user_prompt = Message {
             role: "user".to_string(),
-            content: prompt_generator::generate_analysis_user_prompt(files, &self.repo_path),
+            content: prompt_generator::generate_analysis_user_prompt(files, &self.repository_config.path),
         };
 
         let messages = vec![system_prompt, user_prompt];
@@ -81,21 +83,21 @@ impl CodeAnalyzer {
             })?;
 
 
-        Ok(analysis)
+        Ok(Rc::new(AnalyzeRepositoryResponse { repository_analysis: Rc::new(analysis), repository_config: Rc::new((*self.repository_config).clone()) }))
     }
 
     pub fn apply_change(&self, file_change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
         match file_change {
             FileChange::ModifyFile { file_path, reason: _, severity: _, line_changes } => {
-                FileModifier::validate_file_modifications(&self.repo_path, file_path, line_changes)?;
-                FileModifier::apply_file_modifications(&self.repo_path, file_path, line_changes)?;
+                FileModifier::validate_file_modifications(&self.repository_config.path, file_path, line_changes)?;
+                FileModifier::apply_file_modifications(&self.repository_config.path, file_path, line_changes)?;
             }
             FileChange::CreateFile { file_path, reason: _, severity: _, content } => {
                 self.print_new_file_preview(file_path, content);
-                FileModifier::create_file(&self.repo_path, file_path, content)?;
+                FileModifier::create_file(&self.repository_config.path, file_path, content)?;
             }
             FileChange::DeleteFile { file_path, reason: _, severity: _ } => {
-                FileModifier::delete_file(&self.repo_path, file_path)?;
+                FileModifier::delete_file(&self.repository_config.path, file_path)?;
             }
         }
         Ok(())
@@ -106,7 +108,7 @@ impl CodeAnalyzer {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
         // Load the original file content
-        let full_path = format!("{}/{}", self.repo_path, file_path).replace("//", "/");
+        let full_path = format!("{}/{}", self.repository_config.path, file_path).replace("//", "/");
         let content = fs::read_to_string(&full_path)?;
         let lines: Vec<&str> = content.lines().collect();
 
@@ -176,11 +178,11 @@ impl CodeAnalyzer {
         println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     }
 
-    pub fn print_analysis_report(&self, analysis: &AnalysisResponse) {
+    pub fn print_analysis_report(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) {
         println!("🔍 CODE ANALYSIS REPORT");
         println!("======================");
-        println!("{}\n", analysis.analysis_summary);
-        println!("🔧 CHANGES REQUIRED ({} total):", analysis.changes.len());
+        println!("{}\n", analyze_repository_response.repository_analysis.analysis_summary);
+        println!("🔧 CHANGES REQUIRED ({} total):", analyze_repository_response.repository_analysis.changes.len());
     }
 
     pub fn print_change_report(&self, change: &FileChange) -> Result<(), Box<dyn std::error::Error>>{

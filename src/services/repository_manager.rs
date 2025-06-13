@@ -1,10 +1,13 @@
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Arc;
 use crate::enums::analysis_status::AnalysisStatus;
 use crate::enums::file_change::FileChange;
 use crate::enums::priority::Priority;
 use crate::services::code_analyzer::CodeAnalyzer;
 use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::analysis_result::AnalysisResult;
+use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::config::Config;
 use crate::structs::config::profile_config::ProfileConfig;
 use crate::structs::config::repository_config::RepositoryConfig;
@@ -22,8 +25,7 @@ impl RepositoryManager {
         }
     }
 
-    pub async fn analyze_all_repositories(&mut self) -> Result<Vec<AnalysisResult>, Box<dyn std::error::Error>> {
-        // Clone the repositories to avoid borrowing self while iterating
+    pub async fn analyze_all_repositories(&mut self, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> Result<(), Box<dyn std::error::Error>> {
         let enabled_repos: Vec<_> = self.config.repositories
             .iter()
             .filter(|r| r.enabled)
@@ -32,95 +34,37 @@ impl RepositoryManager {
 
         println!("🚀 Analyzing {} repositories", enabled_repos.len());
 
-        let mut results = Vec::new();
-
-        // Group by priority
-        let mut priority_groups: HashMap<Priority, Vec<RepositoryConfig>> = HashMap::new();
         for repo in enabled_repos {
-            priority_groups.entry(repo.priority.clone()).or_insert(Vec::new()).push(repo);
+            self.analyze_repository(Arc::new(repo), results).await?;
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         }
 
-        // Analyze in priority order
-        for priority in [Priority::Critical, Priority::High, Priority::Medium, Priority::Low] {
-            if let Some(repos) = priority_groups.get(&priority) {
-                println!("\n📊 Analyzing {} priority repositories:", format!("{:?}", priority).to_lowercase());
-
-                for repo in repos {
-                    let result = self.analyze_repository(&repo).await?;
-                    results.push(result);
-
-                    // Add delay between repos to avoid rate limits
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                }
-            }
-        }
-
-        Ok(results)
+        Ok(())
     }
 
-    pub async fn analyze_repository(&mut self, repo: &RepositoryConfig) -> Result<AnalysisResult, Box<dyn std::error::Error>> {
-        println!("\n🔍 Analyzing repository: {}", repo.name);
-        let start_time = std::time::Instant::now();
-
-        // Pull latest changes if configured
-        if repo.auto_pull {
-            self.pull_repository(repo).await?;
+    pub async fn analyze_repository(&mut self, repository_config: Arc<RepositoryConfig>, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("\n🔍 Analyzing repository: {}", repository_config.name);
+        if repository_config.auto_pull {
+            self.pull_repository(Arc::clone(&repository_config)).await?;
         }
 
-        let profile = repo.profile.as_ref()
-            .unwrap_or(&self.config.global.default_profile);
-        
-        let profile_config = self.config.profiles.get(profile)
-            .ok_or_else(|| format!("Profile not found: {}", profile))?;
-        
-        let analyzer = self.create_analyzer_for_repo(repo, profile_config)?;
+        let profile = repository_config.profile.as_ref().unwrap_or(&self.config.global.default_profile);
+        let profile_config = self.config.profiles.get(profile).ok_or_else(|| format!("Profile not found: {}", profile))?;
 
-        match analyzer.analyze_repository().await {
-            Ok(analysis) => {
-                let critical_count = analysis.changes.iter()
-                    .filter(|c| matches!(c,
-                        FileChange::ModifyFile { severity, .. } |
-                        FileChange::CreateFile { severity, .. } |
-                        FileChange::DeleteFile { severity, .. }
-                        if severity == "critical"
-                    ))
-                    .count();
+        let analyzer = self.create_analyzer_for_repo(Arc::clone(&repository_config), profile_config)?;
+        let analyze_repository_response = analyzer.analyze_repository().await?;
+        analyzer.print_analysis_report(Rc::clone(&analyze_repository_response));
+        results.push(Rc::clone(&analyze_repository_response));
 
-                let result = AnalysisResult {
-                    repository: repo.name.clone(),
-                    timestamp: chrono::Utc::now(),
-                    issues_found: analysis.changes.len(),
-                    critical_issues: critical_count,
-                    duration_seconds: start_time.elapsed().as_secs(),
-                    status: AnalysisStatus::Success,
-                };
-
-                // Save results
-                self.save_analysis_results(&repo.name, &analysis).await?;
-
-                // Send notifications if needed
-                if critical_count > 0 || !self.config.notifications.on_critical_only {
-                    self.send_notifications(&result, &analysis).await?;
-                }
-
-                Ok(result)
-            }
-            Err(e) => {
-                let result = AnalysisResult {
-                    repository: repo.name.clone(),
-                    timestamp: chrono::Utc::now(),
-                    issues_found: 0,
-                    critical_issues: 0,
-                    duration_seconds: start_time.elapsed().as_secs(),
-                    status: AnalysisStatus::Failed(()),
-                };
-
-                Ok(result)
-            }
+        self.save_analysis_results(Rc::clone(&analyze_repository_response)).await?;
+        if !self.config.notifications.enabled {
+            self.send_notifications(Rc::clone(&analyze_repository_response)).await?;
         }
+
+        Ok(())
     }
 
-    async fn pull_repository(&self, repo: &RepositoryConfig) -> Result<(), Box<dyn std::error::Error>> {
+    async fn pull_repository(&self, repo: Arc<RepositoryConfig>) -> Result<(), Box<dyn std::error::Error>> {
         use std::process::Command;
 
         println!("  📥 Pulling latest changes...");
@@ -139,7 +83,7 @@ impl RepositoryManager {
 
     fn create_analyzer_for_repo(
         &self,
-        repo: &RepositoryConfig,
+        repository_config: Arc<RepositoryConfig>,
         profile: &ProfileConfig
     ) -> Result<CodeAnalyzer, Box<dyn std::error::Error>> {
         let var_name = match &self.config.ai.api_key_env {
@@ -147,32 +91,22 @@ impl RepositoryManager {
             Some(val) => val
         };
         let api_key = std::env::var(var_name)?;
-        
-        let repo_config = Config {
-            global: self.config.global.clone(),
-            repositories: vec![repo.clone()],
-            profiles: self.config.profiles.clone(),
-            ai: self.config.ai.clone(),
-            output: self.config.output.clone(),
-            notifications: self.config.notifications.clone(),
-        };
 
-        Ok(CodeAnalyzer::new(api_key, repo.path.clone(), &repo_config)?)
+        Ok(CodeAnalyzer::new(api_key, Arc::clone(&repository_config))?)
     }
 
-    async fn save_analysis_results(
+    pub async fn save_analysis_results(
         &self,
-        repo_name: &str,
-        analysis: &AnalysisResponse
+        analyze_repository_response: Rc<AnalyzeRepositoryResponse>
     ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("<UNK> Saving analysis results...");
         todo!();
         Ok(())
     }
 
     async fn send_notifications(
         &self,
-        result: &AnalysisResult,
-        analysis: &AnalysisResponse
+        analyze_repository_response: Rc<AnalyzeRepositoryResponse>
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Implement Slack, email, webhook notifications
         println!("  📨 Sending notifications...");
