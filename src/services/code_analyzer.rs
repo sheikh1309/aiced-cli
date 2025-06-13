@@ -6,30 +6,31 @@ use crate::structs::message::Message;
 use crate::helpers::prompt_generator;
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
-use crate::traits::ai_provider::AiProvider;
 use crate::prompts::system_analysis_prompt::SYSTEM_ANALYSIS_PROMPT;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::ai_providers::anthropic::AnthropicProvider;
+use crate::services::anthropic::AnthropicProvider;
 use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
 use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::analysis_response::AnalysisResponse;
+use crate::structs::config::config::Config;
 use crate::structs::performance_improvement::PerformanceImprovement;
 use crate::structs::security_issue::SecurityIssue;
 
 pub struct CodeAnalyzer {
-    ai_provider: Arc<AnthropicProvider>,
+    anthropic_provider: Arc<AnthropicProvider>,
     repo_scanner: RepoScanner,
     repo_path: String,
 }
 
 impl CodeAnalyzer {
-    pub fn new(api_key: String, repo_path: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let ai_provider = Arc::new(AnthropicProvider::new(api_key.clone(), Arc::new(ApiRateLimiter::new())));
+    
+    pub fn new(api_key: String, repo_path: String, config: &Config) -> Result<Self, Box<dyn std::error::Error>> {
+        let anthropic_provider = Arc::new(AnthropicProvider::new(api_key.clone(), Arc::new(ApiRateLimiter::new())));
         Ok(Self {
-            ai_provider: ai_provider.clone(),
-            repo_scanner: RepoScanner::new(ai_provider, repo_path.clone()),
+            anthropic_provider: anthropic_provider.clone(),
+            repo_scanner: RepoScanner::new(anthropic_provider, repo_path.clone(), config),
             repo_path,
         })
     }
@@ -56,7 +57,7 @@ impl CodeAnalyzer {
         let mut response_text = String::new();
         let mut last_update = Instant::now();
         let update_interval = Duration::from_millis(150);
-        let mut stream = self.ai_provider.trigger_stream_request(&messages).await?;
+        let mut stream = self.anthropic_provider.trigger_stream_request(&messages).await?;
 
         while let Some(result) = stream.next().await {
             if last_update.elapsed() >= update_interval {

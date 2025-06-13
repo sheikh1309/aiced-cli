@@ -1,5 +1,4 @@
 use crate::structs::message::Message;
-use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -9,7 +8,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::stream_item::StreamItem;
-use crate::traits::ai_provider::AiProvider;
 
 #[derive(Serialize)]
 struct Thinking {
@@ -103,6 +101,7 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
+
     pub fn new(api_key: String, rate_limiter: Arc<ApiRateLimiter>) -> Self {
         Self {
             api_key,
@@ -200,13 +199,8 @@ impl AnthropicProvider {
             }
         }
     }
-}
 
-#[async_trait]
-impl AiProvider for AnthropicProvider {
-    type Error = AnthropicError;
-
-    async fn trigger_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
+    pub async fn trigger_stream_request(&self, messages: &[Message]) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
         let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::ApiError(format!("Rate limit error: {}", e)))?;
         println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
 
@@ -256,4 +250,5 @@ impl AiProvider for AnthropicProvider {
 
         Ok(Box::pin(stream))
     }
+
 }

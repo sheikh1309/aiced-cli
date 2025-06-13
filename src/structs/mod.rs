@@ -4,3 +4,6 @@ pub mod stream_item;
 pub mod performance_improvement;
 pub mod security_issue;
 pub mod analysis_response;
+pub mod config;
+pub mod cli;
+pub mod analysis_result;
