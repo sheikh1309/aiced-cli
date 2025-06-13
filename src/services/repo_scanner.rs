@@ -8,9 +8,9 @@ use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::anthropic::AnthropicProvider;
-use crate::structs::config::config::Config;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
+use crate::structs::files_cache::FilesCache;
 use crate::structs::message::Message;
 
 pub struct RepoScanner {
@@ -44,22 +44,49 @@ impl RepoScanner {
     }
 
     pub async fn scan_files(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
-        
-        // todo contion this
-        let repo_config_file = format!("ailyzer/{}.toml", self.repository_config.name);
-        let config_locations = dirs::home_dir().map(|d| d.join(repo_config_file)).unwrap_or_default();
-        if !config_locations.exists() {
-            std::fs::write(&config_locations, "")?;
+        let patterns = self.load_gitignore(&self.repository_config.path).await?;
+        let repo_files_paths = self.collect_file_paths(Path::new(&self.repository_config.path), &patterns).await?;
+
+        let cache_path = self.get_cache_file_path();
+        let files_to_analyze = self.get_filtered_files(repo_files_paths, &cache_path).await?;
+        let files = self.process_files(files_to_analyze).await?;
+
+        Ok(files)
+    }
+
+    fn get_cache_file_path(&self) -> PathBuf {
+        let cache_name = format!("ailyzer/{}.toml", self.repository_config.name);
+        dirs::home_dir()
+            .map(|d| d.join(cache_name))
+            .unwrap_or_default()
+    }
+
+    async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        // Try to load from cache first
+        if let Some(cache) = FilesCache::load_from_file(cache_path)? {
+            if cache.is_valid_for(&repo_files_paths) {
+                println!("📋 Using cached AI filter results ({} files)", cache.files.len());
+                return Ok(cache.to_path_bufs());
+            }
         }
 
-        println!("📋 Loading config from: {}", config_locations.display());
-        let content = std::fs::read_to_string(&config_locations)?;
-        let config: Config = toml::from_str(&content)?;
-        
-        
-        let patterns = self.load_gitignore(&self.repository_config.path).await?;
+        // Cache miss - run AI filtering and update cache
+        self.run_ai_filtering_and_cache(repo_files_paths, cache_path).await
+    }
 
-        let file_paths = self.get_files_to_send(&patterns).await?;
+    async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        println!("🤖 Running AI filtering on {} files...", repo_files_paths.len());
+
+        let filtered_paths = self.filter_files(repo_files_paths.clone()).await?;
+
+        // Create and save cache
+        let cache = FilesCache::from_data(&filtered_paths, &repo_files_paths);
+        cache.save_to_file(cache_path)?;
+
+        Ok(filtered_paths)
+    }
+
+    async fn process_files(&self, file_paths: Vec<PathBuf>) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
         println!("📁 Found {} files to analyze", file_paths.len());
 
         let total_files = file_paths.len();
@@ -78,7 +105,7 @@ impl RepoScanner {
                     }
                 }
             })
-            .buffer_unordered(self.max_concurrent_reads) // Process N files concurrently
+            .buffer_unordered(self.max_concurrent_reads)
             .filter_map(|result| async move {
                 match result {
                     Ok(file_info) => {
@@ -94,12 +121,11 @@ impl RepoScanner {
             .collect()
             .await;
 
-        println!("✅  Processed {} files successfully", files.len());
+        println!("✅ Processed {} files successfully", files.len());
         Ok(files)
     }
 
-    async fn get_files_to_send(&self, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        let repo_files_paths = self.collect_file_paths(Path::new(&self.repository_config.path), &patterns).await?;
+    async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
         let system_prompt = Message {
             role: "system".to_string(),
             content: FILE_FILTER_SYSTEM_PROMPT.to_string(),
@@ -153,8 +179,6 @@ impl RepoScanner {
                 PathBuf::from(str_path)
             })
             .collect();
-        
-        // todo - save this as cache - also find solution if user add new files
 
         Ok(filtered_files_paths)
     }

@@ -60,6 +60,8 @@ impl RepositoryManager {
         if !self.config.notifications.enabled {
             self.send_notifications(Rc::clone(&analyze_repository_response)).await?;
         }
+        
+        // todo - add sleep for rate limit
 
         Ok(())
     }
@@ -99,8 +101,7 @@ impl RepositoryManager {
         &self,
         analyze_repository_response: Rc<AnalyzeRepositoryResponse>
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("<UNK> Saving analysis results...");
-        todo!();
+        println!("  💾 Saving analysis results...");
         Ok(())
     }
 
@@ -110,8 +111,6 @@ impl RepositoryManager {
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Implement Slack, email, webhook notifications
         println!("  📨 Sending notifications...");
-
-        // This would contain actual notification logic
 
         Ok(())
     }

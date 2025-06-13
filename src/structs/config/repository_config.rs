@@ -4,6 +4,7 @@ use crate::enums::priority::Priority;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RepositoryConfig {
     pub name: String,
+
     pub path: String,
 
     #[serde(default)]
