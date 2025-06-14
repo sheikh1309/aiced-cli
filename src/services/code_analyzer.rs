@@ -1,9 +1,7 @@
 use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use futures::StreamExt;
-use crate::structs::message::Message;
 use crate::helpers::prompt_generator;
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
@@ -14,7 +12,6 @@ use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::file_modifier::FileModifier;
 use crate::services::rate_limiter::ApiRateLimiter;
-use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::performance_improvement::PerformanceImprovement;
@@ -40,48 +37,45 @@ impl CodeAnalyzer {
     pub async fn analyze_repository(&self) -> Result<Rc<AnalyzeRepositoryResponse>, Box<dyn std::error::Error>> {
         let files = self.repo_scanner.scan_files().await?;
 
-        let system_prompt = Message {
-            role: "system".to_string(),
-            content: SYSTEM_ANALYSIS_PROMPT.to_string(),
-        };
-
-        let user_prompt = Message {
-            role: "user".to_string(),
-            content: prompt_generator::generate_analysis_user_prompt(files, &self.repository_config.path),
-        };
-
-        let messages = vec![system_prompt, user_prompt];
-
+        let user_prompt = prompt_generator::generate_analysis_user_prompt(files, &self.repository_config.path);
         let mut logger = AnimatedLogger::new("Analyzing Repository".to_string());
-
         logger.start();
-
-        let mut response_text = String::new();
-        let mut last_update = Instant::now();
-        let update_interval = Duration::from_millis(150);
-        let mut stream = self.anthropic_provider.trigger_stream_request(&messages).await?;
+        let mut full_content = String::new();
+        let mut input_tokens = 0u32;
+        let mut output_tokens = 0u32;
+        let mut stream = self.anthropic_provider.trigger_stream_request(SYSTEM_ANALYSIS_PROMPT.to_string(), vec![user_prompt]).await?;
 
         while let Some(result) = stream.next().await {
-            if last_update.elapsed() >= update_interval {
-                last_update = Instant::now();
-            }
-
             match result {
                 Ok(item) => {
-                    response_text.push_str(&item.content);
-                },
+                    if !item.content.is_empty() {
+                        full_content.push_str(&item.content);
+                    }
+
+                    if let Some(input) = item.input_tokens {
+                        input_tokens = input;
+                    }
+
+                    if let Some(output) = item.output_tokens {
+                        output_tokens = output;
+                    }
+
+                    if item.is_complete {
+                        println!("is_complete {:?}", item);
+                        break;
+                    }
+                }
                 Err(_e) => {},
             }
         }
 
         logger.stop("Analysis complete").await;
 
-        let mut parser = Parser::new(&response_text);
-        let analysis = parser.parse()
-            .map_err(|e| {
-                format!("Failed to parse custom format: {}", e)
-            })?;
-
+        println!("Input tokens: {}", input_tokens);
+        println!("Output tokens: {}", output_tokens);
+        fs::write("ai_output.txt", &full_content)?;
+        let mut parser = Parser::new(&full_content);
+        let analysis = parser.parse().map_err(|e| { format!("Failed to parse custom format: {}", e) })?;
 
         Ok(Rc::new(AnalyzeRepositoryResponse { repository_analysis: Rc::new(analysis), repository_config: Rc::new((*self.repository_config).clone()) }))
     }

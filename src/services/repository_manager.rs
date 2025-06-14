@@ -1,15 +1,13 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::enums::analysis_status::AnalysisStatus;
-use crate::enums::file_change::FileChange;
-use crate::enums::priority::Priority;
+use tokio::time::{sleep, Duration};
+use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::code_analyzer::CodeAnalyzer;
 use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::analysis_result::AnalysisResult;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::config::Config;
-use crate::structs::config::profile_config::ProfileConfig;
 use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct RepositoryManager {
@@ -34,9 +32,15 @@ impl RepositoryManager {
 
         println!("🚀 Analyzing {} repositories", enabled_repos.len());
 
-        for repo in enabled_repos {
-            self.analyze_repository(Arc::new(repo), results).await?;
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        for (index, repo) in enabled_repos.iter().enumerate() {
+            self.analyze_repository(Arc::new(repo.clone()), results).await?;
+            
+            if index < enabled_repos.len() - 1 {
+                let mut logger = AnimatedLogger::new("Sleeping for 60 seconds".to_string());
+                logger.start();
+                sleep(Duration::from_secs(60)).await;
+                logger.stop("Resume To Next Repository").await;
+            }
         }
 
         Ok(())
@@ -48,10 +52,10 @@ impl RepositoryManager {
             self.pull_repository(Arc::clone(&repository_config)).await?;
         }
 
-        let profile = repository_config.profile.as_ref().unwrap_or(&self.config.global.default_profile);
-        let profile_config = self.config.profiles.get(profile).ok_or_else(|| format!("Profile not found: {}", profile))?;
+        // let profile = repository_config.profile.as_ref().unwrap_or(&self.config.global.default_profile);
+        // let profile_config = self.config.profiles.get(profile).ok_or_else(|| format!("Profile not found: {}", profile))?;
 
-        let analyzer = self.create_analyzer_for_repo(Arc::clone(&repository_config), profile_config)?;
+        let analyzer = self.create_analyzer_for_repo(Arc::clone(&repository_config))?;
         let analyze_repository_response = analyzer.analyze_repository().await?;
         analyzer.print_analysis_report(Rc::clone(&analyze_repository_response));
         results.push(Rc::clone(&analyze_repository_response));
@@ -60,8 +64,6 @@ impl RepositoryManager {
         if !self.config.notifications.enabled {
             self.send_notifications(Rc::clone(&analyze_repository_response)).await?;
         }
-        
-        // todo - add sleep for rate limit
 
         Ok(())
     }
@@ -86,7 +88,6 @@ impl RepositoryManager {
     fn create_analyzer_for_repo(
         &self,
         repository_config: Arc<RepositoryConfig>,
-        profile: &ProfileConfig
     ) -> Result<CodeAnalyzer, Box<dyn std::error::Error>> {
         let var_name = match &self.config.ai.api_key_env {
             None => panic!("API key environment variable not set"),
@@ -101,7 +102,7 @@ impl RepositoryManager {
         &self,
         analyze_repository_response: Rc<AnalyzeRepositoryResponse>
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("  💾 Saving analysis results...");
+        println!("  💾 Saving analysis results... {:?}", analyze_repository_response);
         Ok(())
     }
 
@@ -110,7 +111,7 @@ impl RepositoryManager {
         analyze_repository_response: Rc<AnalyzeRepositoryResponse>
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Implement Slack, email, webhook notifications
-        println!("  📨 Sending notifications...");
+        println!("  📨 Sending notifications... {:?}", analyze_repository_response);
 
         Ok(())
     }

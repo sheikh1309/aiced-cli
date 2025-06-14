@@ -1,5 +1,4 @@
 pub mod file_info;
-pub mod message;
 pub mod stream_item;
 pub mod performance_improvement;
 pub mod security_issue;
@@ -9,3 +8,4 @@ pub mod cli;
 pub mod analysis_result;
 pub mod analyze_repository_response;
 pub mod files_cache;
+pub mod ai;

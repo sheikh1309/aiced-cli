@@ -11,7 +11,6 @@ use crate::services::anthropic::AnthropicProvider;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::files_cache::FilesCache;
-use crate::structs::message::Message;
 
 pub struct RepoScanner {
     anthropic_provider: Arc<AnthropicProvider>,
@@ -126,17 +125,7 @@ impl RepoScanner {
     }
 
     async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        let system_prompt = Message {
-            role: "system".to_string(),
-            content: FILE_FILTER_SYSTEM_PROMPT.to_string(),
-        };
-
-        let user_prompt = Message {
-            role: "user".to_string(),
-            content: prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repository_config.path),
-        };
-
-        let messages = vec![system_prompt, user_prompt];
+        let user_prompt = prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repository_config.path);
 
         let mut logger = AnimatedLogger::new("File Filtering".to_string());
         logger.start();
@@ -144,7 +133,7 @@ impl RepoScanner {
         let mut response_text = String::new();
         let mut last_update = Instant::now();
         let update_interval = Duration::from_millis(150);
-        let mut stream = self.anthropic_provider.trigger_stream_request(&messages).await?;
+        let mut stream = self.anthropic_provider.trigger_stream_request(FILE_FILTER_SYSTEM_PROMPT.to_string(), vec![user_prompt]).await?;
 
         while let Some(result) = stream.next().await {
             if last_update.elapsed() >= update_interval {

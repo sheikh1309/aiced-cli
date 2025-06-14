@@ -3,7 +3,6 @@ use std::sync::Arc;
 use crate::config::config_manager::ConfigManager;
 use crate::enums::commands::Commands;
 use crate::services::repository_manager::RepositoryManager;
-use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 
 pub struct CommandRunner;
@@ -17,17 +16,17 @@ impl CommandRunner {
     pub async fn run_command(&self, command: Commands) -> Result<(), Box<dyn std::error::Error>> {
         match command {
             Commands::Init => ConfigManager::create_sample_multi_repo_config()?,
-            Commands::Analyze { repo, tags, profile } => self.analyze_repositories(repo, tags, profile).await?,
+            Commands::Analyze { repo, .. } => self.analyze_repositories(repo).await?,
             Commands::List { all } => self.list(all)?,
             Commands::Dashboard { port } => self.dashboard(port)?,
             Commands::Validate => self.validate()?,
-            Commands::History { repo, days } => println!("📜 Showing history for last {} days", days)
+            Commands::History { repo, days } => println!("📜 Showing history for {:?} in last {} days", repo, days)
         }
 
         Ok(())
     }
 
-    async fn analyze_repositories(&self, repo: Option<String>, tags: Vec<String>, profile: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn analyze_repositories(&self, repo: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
         let config = ConfigManager::load()?;
         if let Err(errors) = ConfigManager::validate_config(&config) {
             return Err(errors.join("\n").into());
