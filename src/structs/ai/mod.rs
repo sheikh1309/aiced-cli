@@ -3,7 +3,6 @@ pub mod api_error;
 pub mod content_delta;
 pub mod message_delta;
 pub mod message_request;
-pub mod stream_response;
 pub mod thinking;
 pub mod token_count_request;
 pub mod token_count_response;

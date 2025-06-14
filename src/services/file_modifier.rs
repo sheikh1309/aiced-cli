@@ -1,10 +1,32 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
+use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
+use crate::logger::file_change_logger::FileChangeLogger;
+use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct FileModifier;
 
 impl FileModifier {
+
+    pub fn apply_change(repository_config: Arc<RepositoryConfig>, file_change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
+        match file_change {
+            FileChange::ModifyFile { file_path, reason: _, severity: _, line_changes } => {
+                FileModifier::validate_file_modifications(&repository_config.path, file_path, line_changes)?;
+                FileModifier::apply_file_modifications(&repository_config.path, file_path, line_changes)?;
+            }
+            FileChange::CreateFile { file_path, reason: _, severity: _, content } => {
+                FileChangeLogger::print_new_file_preview(file_path, content);
+                FileModifier::create_file(&repository_config.path, file_path, content)?;
+            }
+            FileChange::DeleteFile { file_path, reason: _, severity: _ } => {
+                FileModifier::delete_file(&repository_config.path, file_path)?;
+            }
+        }
+        Ok(())
+    }
+    
     pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
         let str_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let full_path = Path::new(&*str_path);
@@ -343,7 +365,7 @@ impl FileModifier {
         Ok(())
     }
 
-    pub fn create_file(repo_path: &str, file_path: &str, content: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create_file(repo_path: &String, file_path: &str, content: &str) -> Result<(), Box<dyn std::error::Error>> {
         let full_path = Path::new(repo_path).join(file_path);
 
         if let Some(parent) = full_path.parent() {

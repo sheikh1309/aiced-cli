@@ -1,7 +1,10 @@
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::config::config_manager::ConfigManager;
+use std::io::{self, Write};
 use crate::enums::commands::Commands;
+use crate::config::config_manager::ConfigManager;
+use crate::logger::file_change_logger::FileChangeLogger;
+use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 
@@ -17,7 +20,7 @@ impl CommandRunner {
         match command {
             Commands::Init => ConfigManager::create_sample_multi_repo_config()?,
             Commands::Analyze { repo, .. } => self.analyze_repositories(repo).await?,
-            Commands::List { all } => self.list(all)?,
+            Commands::List { .. } => self.list()?,
             Commands::Dashboard { port } => self.dashboard(port)?,
             Commands::Validate => self.validate()?,
             Commands::History { repo, days } => println!("📜 Showing history for {:?} in last {} days", repo, days)
@@ -47,29 +50,48 @@ impl CommandRunner {
             manager.analyze_all_repositories(&mut results).await?;
         }
         
-        println!("\n✅ Analysis complete: {:?}", results);
+        println!("\n✅ Analysis complete for {} repositories\n", results.len());
         
-        // apply changes
+        for result in results {
+            println!("\n✅ Applying Process for {} repository\n", result.repository_config.name);
+            let mut is_there_applied_changes = false;
+            for change in &result.repository_analysis.changes {
+                FileChangeLogger::print_change_report(Rc::clone(&result.repository_config), &change)?;
+
+                print!("\nApply this change? (y/N): ");
+                io::stdout().flush()?;
+
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+
+                if input.trim().to_lowercase() == "y" {
+                    FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), &change)?;
+                    is_there_applied_changes = true;
+                }
+            }
+            if is_there_applied_changes && result.repository_config.auto_pr {
+                print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
+                io::stdout().flush()?;
+
+                let mut branch = String::new();
+                io::stdin().read_line(&mut branch)?;
+                if branch.trim().to_lowercase() == "" {
+                    branch = "improvements/aiLyzer-apply-changes".to_string();
+                }
+                self.create_pr(Rc::clone(&result), branch).await?;
+            }
+        }
 
         Ok(())
     }
 
-    fn list(&self, all: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn list(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config = ConfigManager::load()?;
 
         println!("📋 Configured Repositories:\n");
         for repo in &config.repositories {
-            if !all && !repo.enabled {
-                continue;
-            }
-
-            println!("  {} {}",
-                     if repo.enabled { "✅" } else { "❌" },
-                     repo.name
-            );
+            println!("  ✅ {}", repo.name);
             println!("     Path: {}", repo.path);
-            println!("     Priority: {:?}", repo.priority);
-            println!("     Tags: {:?}", repo.tags);
             println!();
         }
 
@@ -95,6 +117,13 @@ impl CommandRunner {
             }
         }
 
+        Ok(())
+    }
+
+    // todo - set this in other file
+    async fn create_pr(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>, branch: String) -> Result<(), Box<dyn std::error::Error>> {
+        println!("  📨 Creating PR {:?}, branch: {}", analyze_repository_response, branch);
+        // todo
         Ok(())
     }
 }

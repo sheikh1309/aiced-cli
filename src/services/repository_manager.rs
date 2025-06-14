@@ -3,8 +3,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use crate::logger::animated_logger::AnimatedLogger;
+use crate::logger::file_change_logger::FileChangeLogger;
 use crate::services::code_analyzer::CodeAnalyzer;
-use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::analysis_result::AnalysisResult;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::config::Config;
@@ -26,7 +26,6 @@ impl RepositoryManager {
     pub async fn analyze_all_repositories(&mut self, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> Result<(), Box<dyn std::error::Error>> {
         let enabled_repos: Vec<_> = self.config.repositories
             .iter()
-            .filter(|r| r.enabled)
             .cloned()
             .collect();
 
@@ -52,19 +51,16 @@ impl RepositoryManager {
             self.pull_repository(Arc::clone(&repository_config)).await?;
         }
 
-        // let profile = repository_config.profile.as_ref().unwrap_or(&self.config.global.default_profile);
-        // let profile_config = self.config.profiles.get(profile).ok_or_else(|| format!("Profile not found: {}", profile))?;
-
         let analyzer = self.create_analyzer_for_repo(Arc::clone(&repository_config))?;
         let analyze_repository_response = analyzer.analyze_repository().await?;
-        analyzer.print_analysis_report(Rc::clone(&analyze_repository_response));
+        FileChangeLogger::print_analysis_report(Rc::clone(&analyze_repository_response));
         results.push(Rc::clone(&analyze_repository_response));
 
         self.save_analysis_results(Rc::clone(&analyze_repository_response)).await?;
         if !self.config.notifications.enabled {
             self.send_notifications(Rc::clone(&analyze_repository_response)).await?;
         }
-
+      
         Ok(())
     }
 
@@ -85,10 +81,7 @@ impl RepositoryManager {
         Ok(())
     }
 
-    fn create_analyzer_for_repo(
-        &self,
-        repository_config: Arc<RepositoryConfig>,
-    ) -> Result<CodeAnalyzer, Box<dyn std::error::Error>> {
+    fn create_analyzer_for_repo(&self, repository_config: Arc<RepositoryConfig>) -> Result<CodeAnalyzer, Box<dyn std::error::Error>> {
         let var_name = match &self.config.ai.api_key_env {
             None => panic!("API key environment variable not set"),
             Some(val) => val
@@ -98,37 +91,16 @@ impl RepositoryManager {
         Ok(CodeAnalyzer::new(api_key, Arc::clone(&repository_config))?)
     }
 
-    pub async fn save_analysis_results(
-        &self,
-        analyze_repository_response: Rc<AnalyzeRepositoryResponse>
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn save_analysis_results(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
         println!("  💾 Saving analysis results... {:?}", analyze_repository_response);
+        // todo
         Ok(())
     }
 
-    async fn send_notifications(
-        &self,
-        analyze_repository_response: Rc<AnalyzeRepositoryResponse>
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_notifications(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
         // Implement Slack, email, webhook notifications
         println!("  📨 Sending notifications... {:?}", analyze_repository_response);
-
+        // todo
         Ok(())
-    }
-
-    fn generate_markdown_report(&self, repo_name: &str, analysis: &AnalysisResponse) -> String {
-        format!(
-            "# ailyzer Analysis Report: {}\n\n\
-            **Date**: {}\n\
-            **Issues Found**: {}\n\n\
-            ## Summary\n\
-            {}\n\n\
-            ## Changes Required\n\
-            ...",
-            repo_name,
-            chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
-            analysis.changes.len(),
-            analysis.analysis_summary
-        )
     }
 }

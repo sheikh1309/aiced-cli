@@ -11,10 +11,7 @@ pub enum Commands {
         #[clap(short, long)]
         profile: Option<String>,
     },
-    List {
-        #[clap(long)]
-        all: bool,
-    },
+    List,
     Dashboard {
         #[clap(short, long, default_value = "8080")]
         port: u16,
