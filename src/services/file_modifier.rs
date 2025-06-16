@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::Arc;
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
@@ -13,8 +14,9 @@ impl FileModifier {
     pub fn apply_change(repository_config: Arc<RepositoryConfig>, file_change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
         match file_change {
             FileChange::ModifyFile { file_path, reason: _, severity: _, line_changes } => {
-                FileModifier::validate_file_modifications(&repository_config.path, file_path, line_changes)?;
-                FileModifier::apply_file_modifications(&repository_config.path, file_path, line_changes)?;
+                let references: Rc<Vec<&LineChange>> = Rc::new(line_changes.iter().collect());
+                FileModifier::validate_file_modifications(&repository_config.path, file_path, Rc::clone(&references))?;
+                FileModifier::apply_file_modifications(&repository_config.path, file_path, Rc::clone(&references))?;
             }
             FileChange::CreateFile { file_path, reason: _, severity: _, content } => {
                 FileChangeLogger::print_new_file_preview(file_path, content);
@@ -27,7 +29,7 @@ impl FileModifier {
         Ok(())
     }
     
-    pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> Result<(), Box<dyn std::error::Error>> {
         let str_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let full_path = Path::new(&*str_path);
 
@@ -38,7 +40,7 @@ impl FileModifier {
         let content = fs::read_to_string(&full_path)?;
         let original_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
 
-        let validated_changes = Self::validate_changes(changes, &original_lines)?;
+        let validated_changes = Self::validate_changes(Rc::clone(&changes), &original_lines, full_path.display().to_string())?;
 
         let mut sorted_changes = validated_changes;
         sorted_changes.sort_by_key(|change| Self::get_change_line_number(change));
@@ -135,19 +137,16 @@ impl FileModifier {
         }
     }
 
-    pub fn validate_file_modifications(repo_path: &str, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn validate_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> Result<(), Box<dyn std::error::Error>> {
         let full_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let content = fs::read_to_string(&full_path)?;
         let original_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-
-        Self::validate_changes(changes, &original_lines)?;
-
-        Self::simulate_changes_application(changes, &original_lines)?;
-
+        Self::validate_changes(Rc::clone(&changes), &original_lines, full_path)?;
+        Self::simulate_changes_application(Rc::clone(&changes), &original_lines)?;
         Ok(())
     }
 
-    fn simulate_changes_application(changes: &[LineChange], original_lines: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    fn simulate_changes_application(changes: Rc<Vec<&LineChange>>, original_lines: &[String]) -> Result<(), Box<dyn std::error::Error>> {
 
         let mut sorted_changes = changes.to_vec();
         sorted_changes.sort_by_key(|change| Self::get_change_line_number(change));
@@ -212,7 +211,7 @@ impl FileModifier {
         Ok(())
     }
 
-    fn validate_changes(changes: &[LineChange], lines: &[String]) -> Result<Vec<LineChange>, Box<dyn std::error::Error>> {
+    fn validate_changes(changes: Rc<Vec<&LineChange>>, lines: &[String], full_path: String) -> Result<Vec<LineChange>, Box<dyn std::error::Error>> {
         let mut validated_changes = Vec::new();
 
         for (i, change) in changes.iter().enumerate() {
@@ -221,7 +220,9 @@ impl FileModifier {
                     validated_changes.push(validated);
                 }
                 Err(e) => {
-                    return Err(format!("❌ Change {} validation failed: {}", i + 1, e).into());
+                    println!("❌ Change in {} Failed", full_path);
+                    println!("❌ {}", e);
+                    return Err(format!("Change {} validation failed", i + 1).into());
                 }
             }
         }
@@ -231,7 +232,7 @@ impl FileModifier {
 
     fn validate_single_change(change: &LineChange, lines: &[String]) -> Result<LineChange, String> {
         match change {
-            LineChange::Replace { line_number, old_content, new_content: _new_content } => {
+            LineChange::Replace { line_number, old_content, .. } => {
                 if *line_number == 0 || *line_number > lines.len() {
                     return Err(format!("Line number {} is out of range (1-{})", line_number, lines.len()));
                 }

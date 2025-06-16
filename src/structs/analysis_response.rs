@@ -1,8 +1,9 @@
+use serde::Serialize;
 use crate::enums::file_change::FileChange;
 use crate::structs::performance_improvement::PerformanceImprovement;
 use crate::structs::security_issue::SecurityIssue;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct AnalysisResponse {
     pub analysis_summary: String,
     pub changes: Vec<FileChange>,

@@ -1,25 +1,20 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::logger::file_change_logger::FileChangeLogger;
 use crate::services::code_analyzer::CodeAnalyzer;
-use crate::structs::analysis_result::AnalysisResult;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::config::Config;
 use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct RepositoryManager {
     pub config: Rc<Config>,
-    results_cache: HashMap<String, AnalysisResult>,
 }
 
 impl RepositoryManager {
     pub fn new(config: Rc<Config>) -> Self {
         Self {
             config,
-            results_cache: HashMap::new(),
         }
     }
 
@@ -81,5 +76,5 @@ impl RepositoryManager {
         Ok(CodeAnalyzer::new(api_key, Arc::clone(&repository_config))?)
     }
 
-    
+
 }

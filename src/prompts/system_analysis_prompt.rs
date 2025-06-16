@@ -60,4 +60,30 @@ IMPORTANT RULES FOR LINE MODIFICATIONS:
 - If inserting multiple lines: use multiple insert_after or insert_before actions
 
 BEGIN ANALYSIS NOW:
+
+---
+
+Here is the corrected example for your reference, demonstrating how to use `replace_range` for multi-line changes:
+
+CHANGE: modify_file
+FILE: /src/resolvers/companyResolver.ts
+REASON: Need to pass parameters object when using parameterized query to prevent SQL injection.
+SEVERITY: critical
+ACTION: replace_range
+START_LINE: 31
+END_LINE: 35
+OLD_LINES:
+        return await context.loader
+            .loadEntity(Company, "company")
+            .where(where)
+            .info(info)
+            .loadMany();
+END_OLD_LINES
+NEW_LINES:
+        return await context.loader
+            .loadEntity(Company, "company")
+            .where(where, !!companyIds ? { companyIds } : {})
+            .info(info)
+            .loadMany();
+END_NEW_LINES
 "#;

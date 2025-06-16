@@ -4,11 +4,9 @@ use std::io::{self, Write};
 use crate::enums::commands::Commands;
 use crate::config::config_manager::ConfigManager;
 use crate::logger::file_change_logger::FileChangeLogger;
-use crate::services::code_analyzer::CodeAnalyzer;
 use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
-use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct CommandRunner;
 
@@ -58,7 +56,7 @@ impl CommandRunner {
             FileChangeLogger::print_analysis_report(Rc::clone(&result));
             let mut is_there_applied_changes = false;
             for change in &result.repository_analysis.changes {
-                FileChangeLogger::print_change_report(Rc::clone(&result.repository_config), &change)?;
+                FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
             }
 
             print!("\nApply changes? (y/N): ");
@@ -69,7 +67,7 @@ impl CommandRunner {
 
             if input.trim().to_lowercase() == "y" {
                 for change in &result.repository_analysis.changes {
-                    FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), &change)?;
+                    FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
                     is_there_applied_changes = true;
                 }
             }
@@ -94,7 +92,6 @@ impl CommandRunner {
                 }
 
             }
-
         }
 
         Ok(())

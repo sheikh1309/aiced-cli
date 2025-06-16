@@ -1,5 +1,6 @@
-use std::fs;
+use std::{cmp, fs};
 use std::rc::Rc;
+use terminal_size::{Width, terminal_size};
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
@@ -11,9 +12,18 @@ pub struct FileChangeLogger {}
 
 impl FileChangeLogger {
 
+    fn truncate_line(line: &str, max_width: usize) -> String {
+        if line.len() <= max_width {
+            line.to_string()
+        } else if max_width > 3 {
+            format!("{}...", &line[..max_width - 3])
+        } else {
+            "...".to_string()
+        }
+    }
+
     fn print_diff_preview(repository_config: Rc<RepositoryConfig>, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n📄 Diff preview for {}:", file_path);
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("\n🔥 Diff preview for {}:", file_path);
 
         let full_path = format!("{}/{}", repository_config.path, file_path).replace("//", "/");
         let content = fs::read_to_string(&full_path)?;
@@ -28,112 +38,185 @@ impl FileChangeLogger {
             LineChange::ReplaceRange { start_line, .. } => *start_line,
         });
 
+        // Calculate optimal column widths based on actual terminal size
+        let line_number_width = 4;
+        let separator_width = 3; // " | "
+        let action_width = 20; // Space for action descriptions
+        let min_content_width = 30;
+
+        // Get actual terminal width, fallback to reasonable default
+        let terminal_width = if let Some((Width(w), _)) = terminal_size() {
+            w as usize
+        } else {
+            120 // Fallback width
+        };
+        let available_width = terminal_width - 6; // Account for borders
+
+        // Split available width between before and after columns
+        let total_column_overhead = (line_number_width + separator_width) * 2 + action_width + 6; // borders
+        let content_width = (available_width - total_column_overhead) / 2;
+        let column_width = cmp::max(min_content_width, content_width);
+
+        let before_header = format!("🔍 BEFORE ({})", file_path);
+        let after_header = format!("🚀 AFTER");
+
+        let section_width = line_number_width + separator_width + column_width;
+
+        println!("┌{:─^width$}┬{:─^width$}┬{:─^20}┐",
+                 &before_header, &after_header, "ACTION", width = section_width);
+
         for change in &sorted_changes {
             match change {
                 LineChange::Replace { line_number, old_content, new_content } => {
-                    println!("\n@@ Line {} @@", line_number);
-                    println!("\x1b[31m- {:<4} | {}\x1b[0m", line_number, old_content);
-                    println!("\x1b[32m+ {:<4} | {:?}\x1b[0m", line_number, new_content);
+                    let old_truncated = Self::truncate_line(old_content, column_width);
+                    let new_truncated = Self::truncate_line(new_content, column_width);
+
+                    println!("│ {:>4} │ {:<width$} │ {:>4} │ {:<width$} │ {:^18} │",
+                             line_number,
+                             old_truncated,
+                             line_number,
+                             new_truncated,
+                             "🔄 MODIFIED",
+                             width = column_width
+                    );
                 }
                 LineChange::InsertAfter { line_number, new_content } => {
-                    println!("\n@@ Insert after line {} @@", line_number);
-                    if *line_number > 0 && *line_number <= lines.len() {
-                        println!("  {:<4} | {}", line_number, lines[*line_number - 1]);
-                    }
-                    println!("\x1b[32m+ {:<4} | {}\x1b[0m", line_number + 1, new_content);
+                    let prev_line = if *line_number > 0 && *line_number <= lines.len() {
+                        Self::truncate_line(lines[*line_number - 1], column_width)
+                    } else {
+                        "".to_string()
+                    };
+                    let new_truncated = Self::truncate_line(new_content, column_width);
+
+                    println!("│ {:>4} │ {:<width$} │ {:>4} │ {:<width$} │ {:^18} │",
+                             line_number,
+                             prev_line,
+                             line_number + 1,
+                             new_truncated,
+                             "➕ INSERT AFTER",
+                             width = column_width
+                    );
                 }
                 LineChange::InsertBefore { line_number, new_content } => {
-                    println!("\n@@ Insert before line {} @@", line_number);
-                    println!("\x1b[32m+ {:<4} | {}\x1b[0m", line_number, new_content);
-                    if *line_number > 0 && *line_number <= lines.len() {
-                        println!("  {:<4} | {}", line_number, lines[*line_number - 1]);
-                    }
+                    let curr_line = if *line_number > 0 && *line_number <= lines.len() {
+                        Self::truncate_line(lines[*line_number - 1], column_width)
+                    } else {
+                        "".to_string()
+                    };
+                    let new_truncated = Self::truncate_line(new_content, column_width);
+
+                    println!("│ {:>4} │ {:<width$} │ {:>4} │ {:<width$} │ {:^18} │",
+                             line_number,
+                             curr_line,
+                             line_number,
+                             new_truncated,
+                             "⬆️ INSERT BEFORE",
+                             width = column_width
+                    );
                 }
                 LineChange::Delete { line_number } => {
-                    println!("\n@@ Delete line {} @@", line_number);
-                    if *line_number > 0 && *line_number <= lines.len() {
-                        println!("\x1b[31m- {:<4} | {}\x1b[0m", line_number, lines[*line_number - 1]);
-                    }
+                    let old_line = if *line_number > 0 && *line_number <= lines.len() {
+                        Self::truncate_line(lines[*line_number - 1], column_width)
+                    } else {
+                        "".to_string()
+                    };
+
+                    println!("│ {:>4} │ {:<width$} │ {:>4} │ {:<width$} │ {:^18} │",
+                             line_number,
+                             old_line,
+                             "",
+                             "",
+                             "🗑️ DELETED",
+                             width = column_width
+                    );
                 }
-                LineChange::ReplaceRange { start_line, end_line, old_content, new_content } => {
-                    println!("\n@@ Lines {}-{} @@", start_line, end_line);
-                    // Print removed lines
-                    for (i, line) in old_content.iter().enumerate() {
-                        println!("\x1b[31m- {:<4} | {}\x1b[0m", start_line + i, line);
-                    }
-                    // Print added lines
-                    for (i, line) in new_content.iter().enumerate() {
-                        println!("\x1b[32m+ {:<4} | {}\x1b[0m", start_line + i, line);
+                LineChange::ReplaceRange { start_line, old_content, new_content, .. } => {
+                    let max_lines = old_content.len().max(new_content.len());
+                    for i in 0..max_lines {
+                        let old = if i < old_content.len() {
+                            Self::truncate_line(&old_content[i], column_width)
+                        } else {
+                            "".to_string()
+                        };
+                        let new = if i < new_content.len() {
+                            Self::truncate_line(&new_content[i], column_width)
+                        } else {
+                            "".to_string()
+                        };
+                        let action = if i == 0 { "💥 BLOCK UPDATE" } else { "⚡ ..." };
+
+                        println!("│ {:>4} │ {:<width$} │ {:>4} │ {:<width$} │ {:^18} │",
+                                 start_line + i,
+                                 old,
+                                 start_line + i,
+                                 new,
+                                 action,
+                                 width = column_width
+                        );
                     }
                 }
             }
         }
 
-        println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("└{:─<width$}┴{:─<width$}┴{:─<20}┘",
+                 "", "", "", width = section_width);
+
         Ok(())
     }
 
     pub fn print_new_file_preview(file_path: &str, content: &str) {
-        println!("\n📄 New file preview for {}:", file_path);
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("\n✨ New file preview for {}:", file_path);
+
+        let max_width = 100; // Configurable max width
+        println!("┌{:─^width$}┐", "🆕 NEW FILE", width = max_width);
 
         for (i, line) in content.lines().enumerate() {
-            println!("\x1b[32m+ {:<4} | {}\x1b[0m", i + 1, line);
+            let truncated_line = Self::truncate_line(line, max_width - 10);
+            println!("│\x1b[32m➕ {:>4} │ {:<width$}\x1b[0m│",
+                     i + 1,
+                     truncated_line,
+                     width = max_width - 10);
         }
 
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("└{:─<width$}┘", "", width = max_width);
     }
 
     pub fn print_analysis_report(analyze_repository_response: Rc<AnalyzeRepositoryResponse>) {
-        println!("🔍 CODE ANALYSIS REPORT");
-        println!("======================");
+        println!("\n🚀 CODE ANALYSIS REPORT");
+        println!("═══════════════════════");
         println!("{}\n", analyze_repository_response.repository_analysis.analysis_summary);
         println!("🔧 CHANGES REQUIRED ({} total):", analyze_repository_response.repository_analysis.changes.len());
-    }
-
-    pub fn print_change_report(repository_config: Rc<RepositoryConfig>, change: &FileChange) -> Result<(), Box<dyn std::error::Error>>{
-        let severity = match change {
-            FileChange::ModifyFile { severity, .. } => severity,
-            FileChange::CreateFile { severity, .. } => severity,
-            FileChange::DeleteFile { severity, .. } => severity,
-        };
-        match severity.as_str() {
-            "critical" => FileChangeLogger::print_change_summary(repository_config, change, "\n  🚨 CRITICAL")?,
-            "high" => FileChangeLogger::print_change_summary(repository_config, change, "\n  ⚠️ HIGH")?,
-            "medium" => FileChangeLogger::print_change_summary(repository_config, change, "\n  📋 MEDIUM")?,
-            "low" => FileChangeLogger::print_change_summary(repository_config, change, "\n  💡 LOW")?,
-            _ => FileChangeLogger::print_change_summary(repository_config, change, "\n  📋 MEDIUM")?,
-        }
-
-        Ok(())
+        println!("🔥 {}", "─".repeat(50));
     }
 
     pub fn print_security_issues_report(security_issue: &SecurityIssue) {
-        println!("\n🔒 SECURITY ISSUE:");
-        println!("  ⚠️ {}:{} [{}]: {}", security_issue.file_path, security_issue.line_number, security_issue.severity, security_issue.issue);
-        println!("      💡 {}", security_issue.recommendation);
+        println!("\n🛡️ SECURITY ISSUE");
+        println!("┌─ 📁 File: {}", security_issue.file_path);
+        println!("├─ 📍 Line: {}", security_issue.line_number);
+        println!("├─ ⚠️ Severity: {}", security_issue.severity);
+        println!("├─ 🚨 Issue: {}", security_issue.issue);
+        println!("└─ 💡 Recommendation: {}", security_issue.recommendation);
     }
 
     pub fn print_performance_improvements_report(improvement: &PerformanceImprovement) {
         println!("\n⚡ PERFORMANCE IMPROVEMENT");
-        println!("  🚀 {}:{}: {}", improvement.file_path, improvement.line_number, improvement.issue);
-        println!("      📈 {}", improvement.impact);
+        println!("┌─ 📁 File: {}", improvement.file_path);
+        println!("├─ 📍 Line: {}", improvement.line_number);
+        println!("├─ 🐌 Issue: {}", improvement.issue);
+        println!("└─ 🚀 Impact: {}", improvement.impact);
     }
 
-    pub fn print_change_summary(repository_config: Rc<RepositoryConfig>, change: &FileChange, log_message: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("{}", log_message);
+    pub fn print_change_summary(repository_config: Rc<RepositoryConfig>, change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
         match change {
             FileChange::ModifyFile { file_path, reason, line_changes, .. } => {
-                println!("    📝 {}", file_path);
-                println!("    ❔  {}", reason);
-                println!("    {} line changes", line_changes.len());
+                println!("\n🔧 MODIFYING: {} - {}", file_path, reason);
                 FileChangeLogger::print_diff_preview(repository_config, file_path, line_changes)?;
             }
             FileChange::CreateFile { file_path, reason, .. } => {
-                println!("    📁 {}: {}", file_path, reason);
+                println!("\n✨ CREATING: {} - {}", file_path, reason);
             }
             FileChange::DeleteFile { file_path, reason, .. } => {
-                println!("    🗑️ {}: {}", file_path, reason);
+                println!("\n💥 DELETING: {} - {}", file_path, reason);
             }
         }
 

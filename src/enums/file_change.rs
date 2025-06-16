@@ -21,3 +21,14 @@ pub enum FileChange {
         severity: String,
     },
 }
+
+impl FileChange {
+    // Helper method to extract the file path from any variant
+    pub fn file_path(&self) -> &str {
+        match self {
+            FileChange::ModifyFile { file_path, .. } => file_path,
+            FileChange::CreateFile { file_path, .. } => file_path,
+            FileChange::DeleteFile { file_path, .. } => file_path,
+        }
+    }
+}

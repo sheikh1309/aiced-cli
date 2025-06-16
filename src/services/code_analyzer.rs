@@ -1,4 +1,3 @@
-use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
 use futures::StreamExt;
@@ -69,7 +68,6 @@ impl CodeAnalyzer {
 
         println!("Input tokens: {}", input_tokens);
         println!("Output tokens: {}", output_tokens);
-        fs::write(format!("ai_output_{}.txt", self.repository_config.name), &full_content)?;
 
         let mut parser = Parser::new(&full_content);
         let analysis = parser.parse().map_err(|e| { format!("Failed to parse custom format: {}", e) })?;
