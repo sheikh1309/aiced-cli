@@ -52,6 +52,7 @@ impl FileModifier {
 
             let line_offset = match &adjusted_change {
                 LineChange::Replace { line_number, old_content, new_content } => {
+                    // todo - some times the new content can have multi line
                     Self::apply_replace(&mut lines, *line_number, old_content, new_content)?;
                     0 // Replace doesn't change line count
                 }

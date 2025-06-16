@@ -46,17 +46,18 @@ impl CodeAnalyzer {
                     if !item.content.is_empty() {
                         full_content.push_str(&item.content);
                     }
-
-                    if let Some(input) = item.input_tokens {
-                        input_tokens = input;
+                    
+                    match item.input_tokens { 
+                        Some(usage_input_tokens) => input_tokens += usage_input_tokens,
+                        None => {},
                     }
 
-                    if let Some(output) = item.output_tokens {
-                        output_tokens = output;
+                    match item.output_tokens {
+                        Some(usage_output_tokens) => output_tokens += usage_output_tokens,
+                        None => {},
                     }
 
                     if item.is_complete {
-                        println!("is_complete {:?}", item);
                         break;
                     }
                 }
@@ -69,11 +70,11 @@ impl CodeAnalyzer {
         println!("Input tokens: {}", input_tokens);
         println!("Output tokens: {}", output_tokens);
         fs::write(format!("ai_output_{}.txt", self.repository_config.name), &full_content)?;
-        
+
         let mut parser = Parser::new(&full_content);
         let analysis = parser.parse().map_err(|e| { format!("Failed to parse custom format: {}", e) })?;
 
         Ok(Rc::new(AnalyzeRepositoryResponse { repository_analysis: Rc::new(analysis), repository_config: Rc::new((*self.repository_config).clone()) }))
     }
-    
+
 }

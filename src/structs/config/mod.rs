@@ -10,7 +10,6 @@ pub mod repository_config;
 pub mod slack_config;
 pub mod webhook_config;
 pub mod security_config;
-pub mod ai_config;
 pub mod output_config;
 pub mod performance_config;
 pub mod style_config;

@@ -4,9 +4,11 @@ use std::io::{self, Write};
 use crate::enums::commands::Commands;
 use crate::config::config_manager::ConfigManager;
 use crate::logger::file_change_logger::FileChangeLogger;
+use crate::services::code_analyzer::CodeAnalyzer;
 use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
+use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct CommandRunner;
 
@@ -31,12 +33,12 @@ impl CommandRunner {
 
     async fn analyze_repositories(&self, repo: Option<String>) -> Result<(), Box<dyn std::error::Error>> {
         let config = ConfigManager::load()?;
-        if let Err(errors) = ConfigManager::validate_config(&config) {
+        if let Err(errors) = ConfigManager::validate_config(Rc::clone(&config)) {
             return Err(errors.join("\n").into());
         }
 
         let mut results: Vec<Rc<AnalyzeRepositoryResponse>> = Vec::new();
-        let mut manager = RepositoryManager::new(config);
+        let mut manager = RepositoryManager::new(Rc::clone(&config));
 
         if let Some(repo_name) = repo {
             let repo_config = manager.config.repositories
@@ -53,33 +55,46 @@ impl CommandRunner {
         println!("\n✅ Analysis complete for {} repositories\n", results.len());
         
         for result in results {
-            println!("\n✅ Applying Process for {} repository\n", result.repository_config.name);
+            FileChangeLogger::print_analysis_report(Rc::clone(&result));
             let mut is_there_applied_changes = false;
             for change in &result.repository_analysis.changes {
                 FileChangeLogger::print_change_report(Rc::clone(&result.repository_config), &change)?;
+            }
 
-                print!("\nApply this change? (y/N): ");
-                io::stdout().flush()?;
+            print!("\nApply changes? (y/N): ");
+            io::stdout().flush()?;
 
-                let mut input = String::new();
-                io::stdin().read_line(&mut input)?;
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
 
-                if input.trim().to_lowercase() == "y" {
+            if input.trim().to_lowercase() == "y" {
+                for change in &result.repository_analysis.changes {
                     FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), &change)?;
                     is_there_applied_changes = true;
                 }
             }
-            if is_there_applied_changes && result.repository_config.auto_pr {
-                print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
-                io::stdout().flush()?;
+            
+            if is_there_applied_changes {
+                if result.repository_config.auto_pr {
+                    print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
+                    io::stdout().flush()?;
 
-                let mut branch = String::new();
-                io::stdin().read_line(&mut branch)?;
-                if branch.trim().to_lowercase() == "" {
-                    branch = "improvements/aiLyzer-apply-changes".to_string();
+                    let mut branch = String::new();
+                    io::stdin().read_line(&mut branch)?;
+                    if branch.trim().to_lowercase() == "" {
+                        branch = "improvements/aiLyzer-apply-changes".to_string();
+                    }
+                    self.create_pr(Rc::clone(&result), branch).await?;
                 }
-                self.create_pr(Rc::clone(&result), branch).await?;
+
+                self.save_analysis_results(Rc::clone(&result)).await?;
+
+                if config.notifications.enabled {
+                    self.send_notifications(Rc::clone(&result)).await?;
+                }
+
             }
+
         }
 
         Ok(())
@@ -106,7 +121,7 @@ impl CommandRunner {
 
     fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config = ConfigManager::load()?;
-        match ConfigManager::validate_config(&config) {
+        match ConfigManager::validate_config(Rc::clone(&config)) {
             Ok(_) => println!("✅ Configuration is valid"),
             Err(errors) => {
                 println!("❌ Configuration errors:");
@@ -122,7 +137,20 @@ impl CommandRunner {
 
     // todo - set this in other file
     async fn create_pr(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>, branch: String) -> Result<(), Box<dyn std::error::Error>> {
-        println!("  📨 Creating PR {:?}, branch: {}", analyze_repository_response, branch);
+        println!("  📨 Creating PR branch: {}", branch);
+        // todo
+        Ok(())
+    }
+
+    pub async fn save_analysis_results(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("  💾 Saving analysis results...");
+        // todo
+        Ok(())
+    }
+
+    async fn send_notifications(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
+        // Implement Slack, email, webhook notifications
+        println!("  📨 Sending notifications...");
         // todo
         Ok(())
     }

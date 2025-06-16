@@ -18,6 +18,4 @@ pub struct NotificationConfig {
     #[serde(default)]
     pub enabled: bool,
 
-    #[serde(default)]
-    pub summary_report: bool,
 }

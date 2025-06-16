@@ -11,12 +11,12 @@ use crate::structs::config::config::Config;
 use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct RepositoryManager {
-    pub config: Config,
+    pub config: Rc<Config>,
     results_cache: HashMap<String, AnalysisResult>,
 }
 
 impl RepositoryManager {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Rc<Config>) -> Self {
         Self {
             config,
             results_cache: HashMap::new(),
@@ -53,14 +53,8 @@ impl RepositoryManager {
 
         let analyzer = self.create_analyzer_for_repo(Arc::clone(&repository_config))?;
         let analyze_repository_response = analyzer.analyze_repository().await?;
-        FileChangeLogger::print_analysis_report(Rc::clone(&analyze_repository_response));
         results.push(Rc::clone(&analyze_repository_response));
 
-        self.save_analysis_results(Rc::clone(&analyze_repository_response)).await?;
-        if !self.config.notifications.enabled {
-            self.send_notifications(Rc::clone(&analyze_repository_response)).await?;
-        }
-      
         Ok(())
     }
 
@@ -82,25 +76,10 @@ impl RepositoryManager {
     }
 
     fn create_analyzer_for_repo(&self, repository_config: Arc<RepositoryConfig>) -> Result<CodeAnalyzer, Box<dyn std::error::Error>> {
-        let var_name = match &self.config.ai.api_key_env {
-            None => panic!("API key environment variable not set"),
-            Some(val) => val
-        };
-        let api_key = std::env::var(var_name)?;
-
+        // todo - change to use AWS Secrets Manager
+        let api_key = std::env::var("ANTHROPIC_API_KEY")?;
         Ok(CodeAnalyzer::new(api_key, Arc::clone(&repository_config))?)
     }
 
-    pub async fn save_analysis_results(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("  💾 Saving analysis results... {:?}", analyze_repository_response);
-        // todo
-        Ok(())
-    }
-
-    async fn send_notifications(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> Result<(), Box<dyn std::error::Error>> {
-        // Implement Slack, email, webhook notifications
-        println!("  📨 Sending notifications... {:?}", analyze_repository_response);
-        // todo
-        Ok(())
-    }
+    
 }

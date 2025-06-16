@@ -9,7 +9,6 @@ use crate::enums::stream_event_data::StreamEventData;
 use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::ai::anthropic_message::AnthropicMessage;
 use crate::structs::ai::message_request::MessageRequest;
-use crate::structs::ai::start_usage_info::StartUsageInfo;
 use crate::structs::ai::thinking::Thinking;
 use crate::structs::ai::token_count_request::TokenCountRequest;
 use crate::structs::ai::token_count_response::TokenCountResponse;
@@ -55,7 +54,7 @@ impl AnthropicProvider {
             messages,
             stream,
             thinking: Thinking {
-                r#type: "enabled".to_string(), // Disable thinking for now
+                r#type: "enabled".to_string(),
                 budget_tokens: 63999,
             },
         }
@@ -90,16 +89,11 @@ impl AnthropicProvider {
         if data.contains("\"type\":\"message_stop\"") {
             return None;
         }
-        let mut latest_usage = StartUsageInfo {
-            input_tokens: 0,
-            output_tokens: 0,
-        };
+        
         match serde_json::from_str::<StreamEventData>(data) {
             Ok(event_data) => {
                 let item = match event_data {
                     StreamEventData::MessageStart { message } => {
-                        latest_usage.input_tokens += message.usage.input_tokens;
-                        latest_usage.output_tokens += message.usage.output_tokens;
                         StreamItem::with_tokens(
                             String::new(),
                             Some(message.usage.input_tokens),
@@ -115,11 +109,10 @@ impl AnthropicProvider {
                     }
                     StreamEventData::MessageDelta { delta, usage } => {
                         if let Some(stop_reason) = delta.stop_reason {
-                            latest_usage.output_tokens += usage.output_tokens;
                             StreamItem::complete(
                                 String::new(),
                                 Some(stop_reason.to_string()),
-                                latest_usage
+                                usage.output_tokens
                             )
                         } else {
                             StreamItem::new(String::new())

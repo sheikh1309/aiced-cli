@@ -1,22 +1,23 @@
 use std::path::Path;
 use std::fs;
+use std::rc::Rc;
 use crate::structs::config::config::Config;
 
 pub struct ConfigManager;
 
 impl ConfigManager {
 
-    pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
+    pub fn load() -> Result<Rc<Config>, Box<dyn std::error::Error>> {
         let config_locations = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
 
         if config_locations.exists() {
             println!("📋 Loading config from: {}", config_locations.display());
             let content = fs::read_to_string(&config_locations)?;
             let config: Config = toml::from_str(&content)?;
-            return Ok(config);
+            return Ok(Rc::new(config));
         }
 
-        Ok(Config::default())
+        Ok(Rc::new(Config::default()))
     }
 
     pub fn create_sample_multi_repo_config() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,12 +42,6 @@ branch = "develop"
 auto_pull = false
 auto_pr = true
 
-# AI Configuration
-[ai]
-provider = "anthropic"
-model = "claude-3-5-sonnet-20241022"
-api_key_env = "ANTHROPIC_API_KEY"
-
 # Output Configuration
 [output]
 # Directory to store all analysis results
@@ -69,7 +64,7 @@ summary_report = true
         Ok(())
     }
 
-    pub fn validate_config(config: &Config) -> Result<(), Vec<String>> {
+    pub fn validate_config(config: Rc<Config>) -> Result<(), Vec<String>> {
         let mut errors = Vec::new();
 
         for repo in &config.repositories {

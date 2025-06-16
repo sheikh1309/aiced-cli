@@ -33,7 +33,7 @@ impl FileChangeLogger {
                 LineChange::Replace { line_number, old_content, new_content } => {
                     println!("\n@@ Line {} @@", line_number);
                     println!("\x1b[31m- {:<4} | {}\x1b[0m", line_number, old_content);
-                    println!("\x1b[32m+ {:<4} | {}\x1b[0m", line_number, new_content);
+                    println!("\x1b[32m+ {:<4} | {:?}\x1b[0m", line_number, new_content);
                 }
                 LineChange::InsertAfter { line_number, new_content } => {
                     println!("\n@@ Insert after line {} @@", line_number);

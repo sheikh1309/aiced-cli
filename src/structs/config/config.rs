@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use crate::structs::config::ai_config::AiConfig;
 use crate::structs::config::global_config::GlobalConfig;
 use crate::structs::config::notification_config::NotificationConfig;
 use crate::structs::config::output_config::OutputConfig;
@@ -14,9 +13,6 @@ pub struct Config {
     pub repositories: Vec<RepositoryConfig>,
 
     #[serde(default)]
-    pub ai: AiConfig,
-
-    #[serde(default)]
     pub output: OutputConfig,
 
     #[serde(default)]
@@ -28,7 +24,6 @@ impl Default for Config {
         Self {
             global: Default::default(),
             repositories: vec![],
-            ai: AiConfig::default(),
             output: OutputConfig::default(),
             notifications: Default::default(),
         }

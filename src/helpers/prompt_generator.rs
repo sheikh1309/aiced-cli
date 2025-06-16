@@ -4,7 +4,8 @@ use crate::structs::file_info::FileInfo;
 pub fn generate_analysis_user_prompt(files: Vec<FileInfo>, repo_path: &str) -> String {
     let estimated_size = files.iter().map(|f| f.content.len() * 2).sum::<usize>();
     let mut prompt = String::with_capacity(estimated_size);
-    
+    prompt.push_str("Analyze this code:");
+
     for file in files {
         let path = file.path.replace(repo_path, "");
         let line_count = file.content.lines().count();
@@ -26,7 +27,8 @@ pub fn generate_analysis_user_prompt(files: Vec<FileInfo>, repo_path: &str) -> S
         prompt.push_str(") ===\n\n");
     }
 
-    prompt.push_str("CRITICAL: Use EXACT line numbers from above. If you reference line 562, ensure it exists in the file.\n");
+    prompt.push_str("CRITICAL: Use EXACT line numbers from above. If you reference line 562, ensure it exists in the file.\n\n");
+    prompt.push_str("If you cannot analyze the code, respond with: ANALYSIS_SUMMARY:\nUnable to analyze the provided code. Please ensure valid code was submitted.");
     prompt
 }
 

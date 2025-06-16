@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use crate::structs::ai::start_usage_info::StartUsageInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamItem {
@@ -21,13 +20,13 @@ impl StreamItem {
         }
     }
 
-    pub fn complete(content: String, stop_reason: Option<String>, latest_usage: StartUsageInfo) -> Self {
+    pub fn complete(content: String, stop_reason: Option<String>, output_tokens: u32) -> Self {
         Self {
             content,
             is_complete: true,
             stop_reason,
-            input_tokens: Some(latest_usage.input_tokens),
-            output_tokens: Some(latest_usage.output_tokens),
+            input_tokens: Some(0),
+            output_tokens: Some(output_tokens),
         }
     }
 
