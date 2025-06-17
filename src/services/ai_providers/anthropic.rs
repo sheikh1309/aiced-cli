@@ -4,14 +4,14 @@ use futures::{Stream, StreamExt};
 use std::pin::Pin;
 use std::sync::Arc;
 use futures::future;
-use crate::enums::anthropic_error::AnthropicError;
+use crate::enums::ai_provider_error::AiProviderError;
 use crate::enums::stream_event_data::StreamEventData;
 use crate::services::rate_limiter::ApiRateLimiter;
-use crate::structs::ai::anthropic_message::AnthropicMessage;
-use crate::structs::ai::message_request::MessageRequest;
-use crate::structs::ai::thinking::Thinking;
-use crate::structs::ai::token_count_request::TokenCountRequest;
-use crate::structs::ai::token_count_response::TokenCountResponse;
+use crate::structs::ai::anthropic::anthropic_message::AnthropicMessage;
+use crate::structs::ai::anthropic::anthropic_message_request::AnthropicMessageRequest;
+use crate::structs::ai::anthropic::anthropic_thinking::AnthropicThinking;
+use crate::structs::ai::anthropic::anthropic_token_count_request::AnthropicTokenCountRequest;
+use crate::structs::ai::anthropic::anthropic_token_count_response::AnthropicTokenCountResponse;
 use crate::structs::stream_item::StreamItem;
 
 #[derive(Clone)]
@@ -45,22 +45,22 @@ impl AnthropicProvider {
             .collect()
     }
 
-    fn get_request(&self, system_prompt: String, messages: Vec<AnthropicMessage>, stream: bool) -> MessageRequest {
-        MessageRequest {
+    fn get_request(&self, system_prompt: String, messages: Vec<AnthropicMessage>, stream: bool) -> AnthropicMessageRequest {
+        AnthropicMessageRequest {
             model: self.model.clone(),
             max_tokens: 64000,
             temperature: Some(1.0),
             system: system_prompt,
             messages,
             stream,
-            thinking: Thinking {
+            thinking: AnthropicThinking {
                 r#type: "enabled".to_string(),
                 budget_tokens: 63999,
             },
         }
     }
 
-    async fn make_request(&self, url: String, request_body: MessageRequest) -> Result<reqwest::Response, AnthropicError> {
+    async fn make_request(&self, url: String, request_body: AnthropicMessageRequest) -> Result<reqwest::Response, AiProviderError> {
         println!("📦 Request model: {}", request_body.model);
 
         self.client
@@ -72,10 +72,10 @@ impl AnthropicProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| AnthropicError::NetworkError(e.to_string()))
+            .map_err(|e| AiProviderError::NetworkError(e.to_string()))
     }
 
-    fn parse_sse_line(line: &str) -> Option<Result<StreamItem, AnthropicError>> {
+    fn parse_sse_line(line: &str) -> Option<Result<StreamItem, AiProviderError>> {
         if line.trim().is_empty() || !line.starts_with("data: ") {
             return None;
         }
@@ -119,12 +119,12 @@ impl AnthropicProvider {
                         }
                     }
                     StreamEventData::Error { error } => {
-                        return Some(Err(AnthropicError::ApiError(format!("{}: {}", error.error_type, error.message))));
+                        return Some(Err(AiProviderError::ApiError(format!("{}: {}", error.error_type, error.message))));
                     }
                 };
                 Some(Ok(item))
             }
-            Err(e) => Some(Err(AnthropicError::SerializationError(format!("Failed to parse event: {}", e))))
+            Err(e) => Some(Err(AiProviderError::SerializationError(format!("Failed to parse event: {}", e))))
         }
     }
 
@@ -132,9 +132,9 @@ impl AnthropicProvider {
         &self,
         system_prompt: String,
         user_prompts: Vec<String>
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AnthropicError>> + Send>>, AnthropicError> {
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
-            .map_err(|e| AnthropicError::ApiError(format!("Rate limit error: {}", e)))?;
+            .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
         println!("🚦 Rate limit: {} requests remaining this minute",
                  &self.rate_limiter.check_remaining());
@@ -155,8 +155,8 @@ impl AnthropicProvider {
             eprintln!("❌ API Error Response: {}", error_text);
 
             return Err(match status.as_u16() {
-                401 => AnthropicError::AuthenticationError(error_text),
-                _ => AnthropicError::ApiError(format!("HTTP {}: {}", status, error_text)),
+                401 => AiProviderError::AuthenticationError(error_text),
+                _ => AiProviderError::ApiError(format!("HTTP {}: {}", status, error_text)),
             });
         }
 
@@ -184,7 +184,7 @@ impl AnthropicProvider {
                         Some(futures::stream::iter(items))
                     }
                     Err(e) => {
-                        let error = AnthropicError::NetworkError(format!("Stream error: {}", e));
+                        let error = AiProviderError::NetworkError(format!("Stream error: {}", e));
                         Some(futures::stream::iter(vec![Err(error)]))
                     }
                 })
@@ -194,14 +194,14 @@ impl AnthropicProvider {
         Ok(Box::pin(stream))
     }
     
-    pub async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AnthropicError> {
-        let _ = &self.rate_limiter.acquire().await.map_err(|e| AnthropicError::ApiError(format!("Rate limit error: {}", e)))?;
+    pub async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
+        let _ = &self.rate_limiter.acquire().await.map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
         println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
 
         let url = format!("{}/messages/count_tokens", self.base_url);
         let anthropic_messages = self.get_anthropic_messages(user_prompts);
 
-        let request_body = TokenCountRequest {
+        let request_body = AnthropicTokenCountRequest {
             model: self.model.clone(),
             system: system_prompt,
             messages: anthropic_messages,
@@ -217,13 +217,12 @@ impl AnthropicProvider {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| AnthropicError::NetworkError(e.to_string()))?;
+            .map_err(|e| AiProviderError::NetworkError(e.to_string()))?;
 
-        let body: TokenCountResponse = response.json().await.map_err(|e| AnthropicError::NetworkError(e.to_string()))?;
+        let body: AnthropicTokenCountResponse = response.json().await.map_err(|e| AiProviderError::NetworkError(e.to_string()))?;
         println!("input_tokens = {}", body.input_tokens);
 
         Ok(())
     }
-
 
 }

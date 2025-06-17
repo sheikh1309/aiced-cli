@@ -4,7 +4,7 @@ use futures::StreamExt;
 use crate::helpers::prompt_generator;
 use crate::prompts::system_analysis_prompt::SYSTEM_ANALYSIS_PROMPT;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::anthropic::AnthropicProvider;
+use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::services::rate_limiter::ApiRateLimiter;

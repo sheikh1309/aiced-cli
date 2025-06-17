@@ -1,26 +1,26 @@
 use serde::Deserialize;
 use crate::structs::ai::api_error::ApiError;
-use crate::structs::ai::content_delta::ContentDelta;
-use crate::structs::ai::message_delta::MessageDelta;
-use crate::structs::ai::message_start_info::MessageStartInfo;
-use crate::structs::ai::finish_usage_info::FinishUsageInfo;
+use crate::structs::ai::anthropic::anthropic_content_delta::AnthropicContentDelta;
+use crate::structs::ai::anthropic::anthropic_message_delta::AnthropicMessageDelta;
+use crate::structs::ai::anthropic::anthropic_message_start_info::AnthropicMessageStartInfo;
+use crate::structs::ai::anthropic::anthropic_finish_usage_info::AnthropicFinishUsageInfo;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum StreamEventData {
     #[serde(rename = "message_start")]
     MessageStart {
-        message: MessageStartInfo,
+        message: AnthropicMessageStartInfo,
     },
     #[serde(rename = "content_block_delta")]
     ContentBlockDelta {
         index: usize,
-        delta: ContentDelta,
+        delta: AnthropicContentDelta,
     },
     #[serde(rename = "message_delta")]
     MessageDelta {
-        delta: MessageDelta,
-        usage: FinishUsageInfo,
+        delta: AnthropicMessageDelta,
+        usage: AnthropicFinishUsageInfo,
     },
     #[serde(rename = "error")]
     Error {

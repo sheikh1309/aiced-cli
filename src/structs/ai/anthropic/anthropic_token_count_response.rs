@@ -2,6 +2,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
-pub struct TokenCountResponse {
+pub struct AnthropicTokenCountResponse {
     pub input_tokens: usize,
 }

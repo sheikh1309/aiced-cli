@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct StartUsageInfo {
+pub struct AnthropicStartUsageInfo {
     pub input_tokens: u32,
     pub output_tokens: u32,
 }

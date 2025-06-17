@@ -7,7 +7,7 @@ use futures::{stream, StreamExt};
 use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::anthropic::AnthropicProvider;
+use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::files_cache::FilesCache;
