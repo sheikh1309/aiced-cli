@@ -51,27 +51,56 @@ impl CommandRunner {
         }
         
         println!("\n✅ Analysis complete for {} repositories\n", results.len());
-        
+
         for result in results {
             FileChangeLogger::print_analysis_report(Rc::clone(&result));
-            let mut is_there_applied_changes = false;
-            for change in &result.repository_analysis.changes {
-                FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
-            }
 
-            print!("\nApply changes? (y/N): ");
+            // Ask if user wants to review changes individually
+            print!("\nReview changes individually? (y/N): ");
             io::stdout().flush()?;
 
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
+            let mut review_mode = String::new();
+            io::stdin().read_line(&mut review_mode)?;
+            let individual_review = review_mode.trim().to_lowercase() == "y";
 
-            if input.trim().to_lowercase() == "y" {
+            let mut is_there_applied_changes = false;
+
+            if individual_review {
+                // Individual review mode
                 for change in &result.repository_analysis.changes {
-                    FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
-                    is_there_applied_changes = true;
+                    FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
+
+                    print!("\nApply this change? (y/N): ");
+                    io::stdout().flush()?;
+
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)?;
+
+                    if input.trim().to_lowercase() == "y" {
+                        FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
+                        is_there_applied_changes = true;
+                    }
+                }
+            } else {
+                // Bulk review mode (original behavior)
+                for change in &result.repository_analysis.changes {
+                    FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
+                }
+
+                print!("\nApply all changes? (y/N): ");
+                io::stdout().flush()?;
+
+                let mut input = String::new();
+                io::stdin().read_line(&mut input)?;
+
+                if input.trim().to_lowercase() == "y" {
+                    for change in &result.repository_analysis.changes {
+                        FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
+                        is_there_applied_changes = true;
+                    }
                 }
             }
-            
+
             if is_there_applied_changes {
                 if result.repository_config.auto_pr {
                     print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
@@ -79,7 +108,7 @@ impl CommandRunner {
 
                     let mut branch = String::new();
                     io::stdin().read_line(&mut branch)?;
-                    if branch.trim().to_lowercase() == "" {
+                    if branch.trim().is_empty() {
                         branch = "improvements/aiLyzer-apply-changes".to_string();
                     }
                     self.create_pr(Rc::clone(&result), branch).await?;
@@ -90,7 +119,6 @@ impl CommandRunner {
                 if config.notifications.enabled {
                     self.send_notifications(Rc::clone(&result)).await?;
                 }
-
             }
         }
 
