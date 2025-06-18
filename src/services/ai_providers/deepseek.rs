@@ -3,12 +3,14 @@ use reqwest::Client;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
 use std::sync::Arc;
+use async_trait::async_trait;
 use futures::future;
 use crate::enums::ai_provider_error::AiProviderError;
 use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::ai::deepseek::deepseek_message::DeepSeekMessage;
 use crate::structs::ai::deepseek::deepseek_request::DeepSeekRequest;
 use crate::structs::stream_item::StreamItem;
+use crate::traits::ai_provider::AiProvider;
 
 #[derive(Clone)]
 pub struct DeepSeekProvider {
@@ -153,8 +155,12 @@ impl DeepSeekProvider {
             Err(e) => Some(Err(AiProviderError::SerializationError(format!("Failed to parse DeepSeek event: {}", e))))
         }
     }
+}
 
-    pub async fn trigger_stream_request(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
+#[async_trait]
+impl AiProvider for DeepSeekProvider {
+
+    async fn stream_chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
@@ -216,7 +222,7 @@ impl DeepSeekProvider {
         Ok(Box::pin(stream))
     }
 
-    pub async fn get_non_streaming_response(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<String, AiProviderError> {
+    async fn chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<String, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
@@ -258,7 +264,7 @@ impl DeepSeekProvider {
         Ok(content.to_string())
     }
 
-    pub async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
+    async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
         // Note: DeepSeek may not have a dedicated token counting endpoint like Anthropic
         // This is a placeholder implementation - you might need to estimate tokens or use a different approach
 

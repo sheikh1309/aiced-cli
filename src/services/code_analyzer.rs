@@ -4,26 +4,24 @@ use futures::StreamExt;
 use crate::helpers::prompt_generator;
 use crate::prompts::system_analysis_prompt::SYSTEM_ANALYSIS_PROMPT;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::services::custom_parser::Parser;
 use crate::services::repo_scanner::RepoScanner;
-use crate::services::rate_limiter::ApiRateLimiter;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
+use crate::traits::ai_provider::AiProvider;
 
 pub struct CodeAnalyzer {
-    anthropic_provider: Arc<AnthropicProvider>,
+    ai_provider: Arc<dyn AiProvider>,
     repo_scanner: RepoScanner,
     repository_config: Arc<RepositoryConfig>,
 }
 
 impl CodeAnalyzer {
 
-    pub fn new(api_key: String, repository_config: Arc<RepositoryConfig>) -> Result<Self, Box<dyn std::error::Error>> {
-        let anthropic_provider = Arc::new(AnthropicProvider::new(api_key.clone(), Arc::new(ApiRateLimiter::new())));
+    pub fn new(ai_provider: Arc<dyn AiProvider>, repository_config: Arc<RepositoryConfig>) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
-            anthropic_provider: Arc::clone(&anthropic_provider),
-            repo_scanner: RepoScanner::new(anthropic_provider, Arc::clone(&repository_config)),
+            ai_provider: Arc::clone(&ai_provider),
+            repo_scanner: RepoScanner::new(ai_provider, Arc::clone(&repository_config)),
             repository_config,
         })
     }
@@ -37,7 +35,7 @@ impl CodeAnalyzer {
         let mut full_content = String::new();
         let mut input_tokens = 0u32;
         let mut output_tokens = 0u32;
-        let mut stream = self.anthropic_provider.trigger_stream_request(SYSTEM_ANALYSIS_PROMPT.to_string(), vec![user_prompt]).await?;
+        let mut stream = self.ai_provider.stream_chat(SYSTEM_ANALYSIS_PROMPT.to_string(), vec![user_prompt]).await?;
 
         while let Some(result) = stream.next().await {
             match result {

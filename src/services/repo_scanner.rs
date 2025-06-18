@@ -7,21 +7,21 @@ use futures::{stream, StreamExt};
 use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::ai_providers::anthropic::AnthropicProvider;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::files_cache::FilesCache;
+use crate::traits::ai_provider::AiProvider;
 
 pub struct RepoScanner {
-    anthropic_provider: Arc<AnthropicProvider>,
+    ai_provider: Arc<dyn AiProvider>,
     repository_config: Arc<RepositoryConfig>,
     max_concurrent_reads: usize,
 }
 
 impl RepoScanner {
-    pub fn new(anthropic_provider: Arc<AnthropicProvider>, repository_config: Arc<RepositoryConfig>) -> Self {
+    pub fn new(ai_provider: Arc<dyn AiProvider>, repository_config: Arc<RepositoryConfig>) -> Self {
         Self {
-            anthropic_provider,
+            ai_provider,
             repository_config,
             max_concurrent_reads: 10
         }
@@ -133,7 +133,7 @@ impl RepoScanner {
         let mut response_text = String::new();
         let mut last_update = Instant::now();
         let update_interval = Duration::from_millis(150);
-        let mut stream = self.anthropic_provider.trigger_stream_request(FILE_FILTER_SYSTEM_PROMPT.to_string(), vec![user_prompt]).await?;
+        let mut stream = self.ai_provider.stream_chat(FILE_FILTER_SYSTEM_PROMPT.to_string(), vec![user_prompt]).await?;
 
         while let Some(result) = stream.next().await {
             if last_update.elapsed() >= update_interval {

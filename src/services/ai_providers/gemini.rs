@@ -3,6 +3,7 @@ use reqwest::Client;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
 use std::sync::Arc;
+use async_trait::async_trait;
 use futures::future;
 use crate::enums::ai_provider_error::AiProviderError;
 use crate::services::rate_limiter::ApiRateLimiter;
@@ -11,6 +12,7 @@ use crate::structs::ai::gemini::gemini_content::GeminiContent;
 use crate::structs::ai::gemini::gemini_part::GeminiPart;
 use crate::structs::ai::gemini::gemini_generation_config::GeminiGenerationConfig;
 use crate::structs::stream_item::StreamItem;
+use crate::traits::ai_provider::AiProvider;
 
 #[derive(Clone)]
 pub struct GeminiProvider {
@@ -168,8 +170,11 @@ impl GeminiProvider {
             Err(e) => Some(Err(AiProviderError::SerializationError(format!("Failed to parse Gemini event: {}", e))))
         }
     }
+}
 
-    pub async fn trigger_stream_request(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
+#[async_trait]
+impl AiProvider for GeminiProvider {
+    async fn stream_chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
@@ -234,7 +239,7 @@ impl GeminiProvider {
         Ok(Box::pin(stream))
     }
 
-    pub async fn get_non_streaming_response(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<String, AiProviderError> {
+    async fn chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<String, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
@@ -282,7 +287,7 @@ impl GeminiProvider {
         Ok(content.to_string())
     }
 
-    pub async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
+    async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 

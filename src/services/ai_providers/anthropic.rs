@@ -3,6 +3,7 @@ use reqwest::Client;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
 use std::sync::Arc;
+use async_trait::async_trait;
 use futures::future;
 use crate::enums::ai_provider_error::AiProviderError;
 use crate::enums::stream_event_data::StreamEventData;
@@ -13,6 +14,7 @@ use crate::structs::ai::anthropic::anthropic_thinking::AnthropicThinking;
 use crate::structs::ai::anthropic::anthropic_token_count_request::AnthropicTokenCountRequest;
 use crate::structs::ai::anthropic::anthropic_token_count_response::AnthropicTokenCountResponse;
 use crate::structs::stream_item::StreamItem;
+use crate::traits::ai_provider::AiProvider;
 
 #[derive(Clone)]
 pub struct AnthropicProvider {
@@ -24,7 +26,6 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
-
     pub fn new(api_key: String, rate_limiter: Arc<ApiRateLimiter>) -> Self {
         Self {
             api_key,
@@ -127,12 +128,11 @@ impl AnthropicProvider {
             Err(e) => Some(Err(AiProviderError::SerializationError(format!("Failed to parse event: {}", e))))
         }
     }
+}
 
-    pub async fn trigger_stream_request(
-        &self,
-        system_prompt: String,
-        user_prompts: Vec<String>
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
+#[async_trait]
+impl AiProvider for AnthropicProvider {
+    async fn stream_chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<Pin<Box<dyn Stream<Item = Result<StreamItem, AiProviderError>> + Send>>, AiProviderError> {
         let _ = &self.rate_limiter.acquire().await
             .map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
 
@@ -193,8 +193,12 @@ impl AnthropicProvider {
 
         Ok(Box::pin(stream))
     }
-    
-    pub async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
+
+    async fn chat(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<String, AiProviderError> {
+        Ok(String::from(system_prompt.trim_end_matches('\n')))
+    }
+
+    async fn token_count(&self, system_prompt: String, user_prompts: Vec<String>) -> Result<(), AiProviderError> {
         let _ = &self.rate_limiter.acquire().await.map_err(|e| AiProviderError::ApiError(format!("Rate limit error: {}", e)))?;
         println!("🚦 Rate limit: {} requests remaining this minute", &self.rate_limiter.check_remaining());
 
@@ -224,5 +228,4 @@ impl AnthropicProvider {
 
         Ok(())
     }
-
 }
