@@ -7,6 +7,7 @@ use crate::logger::file_change_logger::FileChangeLogger;
 use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
+use crate::structs::config::config::Config;
 
 pub struct CommandRunner;
 
@@ -45,79 +46,147 @@ impl CommandRunner {
                 .cloned()
                 .ok_or_else(|| format!("Repository not found: {}", repo_name))?;
 
-            manager.analyze_repository(Arc::new(repo_config), &mut results).await?;
+            // Handle single repository analysis errors
+            match manager.analyze_repository(Arc::new(repo_config.clone()), &mut results).await {
+                Ok(_) => {
+                    println!("✅ Successfully analyzed repository: {}", repo_config.name);
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to analyze repository '{}': {}", repo_config.name, e);
+                    eprintln!("   Continuing with next operations...");
+                    // Don't return error - just log and continue
+                }
+            }
         } else {
-            manager.analyze_all_repositories(&mut results).await?;
+            // Handle multiple repositories analysis errors
+            match manager.analyze_all_repositories(&mut results).await {
+                Ok(_) => {
+                    println!("✅ Successfully analyzed all repositories");
+                }
+                Err(e) => {
+                    eprintln!("❌ Error during repository analysis: {}", e);
+                    eprintln!("   Some repositories may have failed. Continuing with successful ones...");
+                    // Don't return error - just log and continue with any successful results
+                }
+            }
         }
-        
+
+        if results.is_empty() {
+            println!("⚠️  No repositories were successfully analyzed. Please check the errors above.");
+            return Ok(()); // Return success but with no results to process
+        }
+
         println!("\n✅ Analysis complete for {} repositories\n", results.len());
 
         for result in results {
-            FileChangeLogger::print_analysis_report(Rc::clone(&result));
+            if let Err(e) = self.process_repository_result(result, &config).await {
+                eprintln!("❌ Error processing repository results: {}", e);
+                eprintln!("   Continuing with next repository...");
+                // Continue with next repository instead of stopping
+            }
+        }
 
-            // Ask if user wants to review changes individually
-            print!("\nReview changes individually? (y/N): ");
-            io::stdout().flush()?;
+        Ok(())
+    }
 
-            let mut review_mode = String::new();
-            io::stdin().read_line(&mut review_mode)?;
-            let individual_review = review_mode.trim().to_lowercase() == "y";
+    async fn process_repository_result(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+        FileChangeLogger::print_analysis_report(Rc::clone(&result));
 
-            let mut is_there_applied_changes = false;
+        print!("\nReview changes individually? (y/N): ");
+        io::stdout().flush()?;
 
-            if individual_review {
-                // Individual review mode
-                for change in &result.repository_analysis.changes {
-                    FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
+        let mut review_mode = String::new();
+        io::stdin().read_line(&mut review_mode)?;
+        let individual_review = review_mode.trim().to_lowercase() == "y";
 
-                    print!("\nApply this change? (y/N): ");
-                    io::stdout().flush()?;
+        let mut is_there_applied_changes = false;
 
-                    let mut input = String::new();
-                    io::stdin().read_line(&mut input)?;
-
-                    if input.trim().to_lowercase() == "y" {
-                        FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
-                        is_there_applied_changes = true;
-                    }
-                }
-            } else {
-                // Bulk review mode (original behavior)
-                for change in &result.repository_analysis.changes {
-                    FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change)?;
+        if individual_review {
+            // Individual review mode
+            for change in &result.repository_analysis.changes {
+                if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                    eprintln!("❌ Error printing change summary: {}", e);
+                    continue; // Skip this change and continue with next
                 }
 
-                print!("\nApply all changes? (y/N): ");
+                print!("\nApply this change? (y/N): ");
                 io::stdout().flush()?;
 
                 let mut input = String::new();
                 io::stdin().read_line(&mut input)?;
 
                 if input.trim().to_lowercase() == "y" {
-                    for change in &result.repository_analysis.changes {
-                        FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change)?;
-                        is_there_applied_changes = true;
+                    match FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change) {
+                        Ok(_) => {
+                            is_there_applied_changes = true;
+                            println!("✅ Change applied successfully");
+                        }
+                        Err(e) => {
+                            eprintln!("❌ Failed to apply change: {}", e);
+                            eprintln!("   Continuing with next change...");
+                            // Continue with next change instead of failing completely
+                        }
                     }
                 }
             }
+        } else {
+            // Bulk review mode (original behavior)
+            for change in &result.repository_analysis.changes {
+                if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                    eprintln!("❌ Error printing change summary: {}", e);
+                    continue; // Skip this change and continue with next
+                }
+            }
 
-            if is_there_applied_changes {
-                if result.repository_config.auto_pr {
-                    print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
-                    io::stdout().flush()?;
+            print!("\nApply all changes? (y/N): ");
+            io::stdout().flush()?;
 
-                    let mut branch = String::new();
-                    io::stdin().read_line(&mut branch)?;
-                    if branch.trim().is_empty() {
-                        branch = "improvements/aiLyzer-apply-changes".to_string();
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+
+            if input.trim().to_lowercase() == "y" {
+                for change in &result.repository_analysis.changes {
+                    match FileModifier::apply_change(Arc::new(result.repository_config.as_ref().clone()), change) {
+                        Ok(_) => {
+                            is_there_applied_changes = true;
+                            println!("✅ Change applied successfully");
+                        }
+                        Err(e) => {
+                            eprintln!("❌ Failed to apply change: {}", e);
+                            eprintln!("   Continuing with next change...");
+                            // Continue with next change instead of failing completely
+                        }
                     }
-                    self.create_pr(Rc::clone(&result), branch).await?;
+                }
+            }
+        }
+
+        if is_there_applied_changes {
+            if result.repository_config.auto_pr {
+                print!("\nPR Branch name? (default: \"improvements/aiLyzer-apply-changes\"): ");
+                io::stdout().flush()?;
+
+                let mut branch = String::new();
+                io::stdin().read_line(&mut branch)?;
+                if branch.trim().is_empty() {
+                    branch = "improvements/aiLyzer-apply-changes".to_string();
                 }
 
-                self.save_analysis_results(Rc::clone(&result)).await?;
+                if let Err(e) = self.create_pr(Rc::clone(&result), branch).await {
+                    eprintln!("❌ Failed to create PR: {}", e);
+                    eprintln!("   Continuing with other operations...");
+                }
+            }
 
-                if config.notifications.enabled {
-                    self.send_notifications(Rc::clone(&result)).await?;
+            if let Err(e) = self.save_analysis_results(Rc::clone(&result)).await {
+                eprintln!("❌ Failed to save analysis results: {}", e);
+                eprintln!("   Continuing with other operations...");
+            }
+
+            if config.notifications.enabled {
+                if let Err(e) = self.send_notifications(Rc::clone(&result)).await {
+                    eprintln!("❌ Failed to send notifications: {}", e);
+                    eprintln!("   Continuing with other operations...");
                 }
             }
         }

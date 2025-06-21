@@ -6,11 +6,9 @@ mod structs;
 mod services;
 mod helpers;
 mod enums;
-mod prompts;
 mod logger;
 mod config;
 mod workers;
-mod traits;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

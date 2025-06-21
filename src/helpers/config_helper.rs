@@ -50,22 +50,6 @@ impl ConfigHelper {
         "smart".to_string()
     }
 
-    pub fn default_model() -> String {
-        "claude-3-5-sonnet-20241022".to_string()
-    }
-
-    pub fn default_max_tokens() -> u32 {
-        8192
-    }
-
-    pub fn default_temperature() -> f32 {
-        0.0
-    }
-
-    pub fn default_provider() -> String {
-        "anthropic".to_string()
-    }
-
     pub fn default_format() -> String {
         "custom".to_string()
     }

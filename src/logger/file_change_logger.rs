@@ -5,8 +5,6 @@ use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
-use crate::structs::performance_improvement::PerformanceImprovement;
-use crate::structs::security_issue::SecurityIssue;
 
 pub struct FileChangeLogger {}
 
@@ -187,23 +185,6 @@ impl FileChangeLogger {
         println!("{}\n", analyze_repository_response.repository_analysis.analysis_summary);
         println!("🔧 CHANGES REQUIRED ({} total):", analyze_repository_response.repository_analysis.changes.len());
         println!("🔥 {}", "─".repeat(50));
-    }
-
-    pub fn print_security_issues_report(security_issue: &SecurityIssue) {
-        println!("\n🛡️ SECURITY ISSUE");
-        println!("┌─ 📁 File: {}", security_issue.file_path);
-        println!("├─ 📍 Line: {}", security_issue.line_number);
-        println!("├─ ⚠️ Severity: {}", security_issue.severity);
-        println!("├─ 🚨 Issue: {}", security_issue.issue);
-        println!("└─ 💡 Recommendation: {}", security_issue.recommendation);
-    }
-
-    pub fn print_performance_improvements_report(improvement: &PerformanceImprovement) {
-        println!("\n⚡ PERFORMANCE IMPROVEMENT");
-        println!("┌─ 📁 File: {}", improvement.file_path);
-        println!("├─ 📍 Line: {}", improvement.line_number);
-        println!("├─ 🐌 Issue: {}", improvement.issue);
-        println!("└─ 🚀 Impact: {}", improvement.impact);
     }
 
     pub fn print_change_summary(repository_config: Rc<RepositoryConfig>, change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {

@@ -1,29 +1,30 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::fs;
 use futures::{stream, StreamExt};
-use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
+use reqwest::Client;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
+use crate::structs::analyze_request::AnalyzeRequest;
+use crate::structs::analyze_response::AnalyzeResponse;
+use crate::structs::api_response::ApiResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::files_cache::FilesCache;
-use crate::traits::ai_provider::AiProvider;
 
 pub struct RepoScanner {
-    ai_provider: Arc<dyn AiProvider>,
     repository_config: Arc<RepositoryConfig>,
     max_concurrent_reads: usize,
+    client: Client,
 }
 
 impl RepoScanner {
-    pub fn new(ai_provider: Arc<dyn AiProvider>, repository_config: Arc<RepositoryConfig>) -> Self {
+    pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
         Self {
-            ai_provider,
             repository_config,
-            max_concurrent_reads: 10
+            max_concurrent_reads: 10,
+            client: Client::new(),
         }
     }
 
@@ -130,36 +131,45 @@ impl RepoScanner {
         let mut logger = AnimatedLogger::new("File Filtering".to_string());
         logger.start();
 
-        let mut response_text = String::new();
-        let mut last_update = Instant::now();
-        let update_interval = Duration::from_millis(150);
-        let mut stream = self.ai_provider.stream_chat(FILE_FILTER_SYSTEM_PROMPT.to_string(), vec![user_prompt]).await?;
+        let request_body = AnalyzeRequest { prompt: user_prompt };
 
-        while let Some(result) = stream.next().await {
-            if last_update.elapsed() >= update_interval {
-                last_update = Instant::now();
+        let response = match self.client
+            .post("http://localhost:3000/api/files_filter")
+            .header("x-api-key", "api-key-123456")
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                logger.stop("File filtering failed").await;
+                eprintln!("Network error during file filter request: {}", e);
+                return Err("Failed to connect to file filter server".into());
             }
+        };
 
-            match result {
-                Ok(item) => {
-                    response_text.push_str(&item.content);
-                },
-                Err(_e) => {},
+        let response = match response.error_for_status() {
+            Ok(resp) => resp,
+            Err(e) => {
+                logger.stop("File filtering failed").await;
+                eprintln!("File filter request failed with status error: {}", e);
+                return Err(format!("File filter request failed: {}", e).into());
             }
-        }
-        
-        logger.stop("File Filtering complete").await;
+        };
 
-        let clean_response = response_text
-            .replace("```json", "")
-            .replace("```", "")
-            .trim()
-            .to_string();
+        let body: ApiResponse<AnalyzeResponse> = match response.json().await {
+            Ok(data) => data,
+            Err(e) => {
+                logger.stop("File filtering failed").await;
+                eprintln!("Failed to parse file filter response: {}", e);
+                return Err("Invalid response format from file filter server".into());
+            }
+        };
 
-        let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(&clean_response)
+        let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(&body.data.unwrap().content)
             .unwrap_or_else(|e| {
-                eprintln!("Failed to parse JSON response: {}", e);
-                eprintln!("Response was: {}", clean_response);
+                eprintln!("Failed to parse filtered files JSON: {}", e);
                 Vec::new()
             })
             .into_iter()
@@ -169,6 +179,7 @@ impl RepoScanner {
             })
             .collect();
 
+        logger.stop("File filtering complete").await;
         Ok(filtered_files_paths)
     }
 

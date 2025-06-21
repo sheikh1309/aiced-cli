@@ -1,11 +1,11 @@
 pub mod file_info;
-pub mod stream_item;
 pub mod performance_improvement;
 pub mod security_issue;
 pub mod analysis_response;
 pub mod config;
 pub mod cli;
-pub mod analysis_result;
 pub mod analyze_repository_response;
 pub mod files_cache;
-pub mod ai;
+pub mod analyze_request;
+pub mod analyze_response;
+pub mod api_response;
