@@ -1,15 +1,179 @@
 [package]
 name = "ailyzer"
-version = "0.1.0"
-edition = "2024"
+version = "0.2.0"
+edition = "2021"
+authors = ["Ailyzer Team"]
+description = "AI-powered code analysis tool with enhanced parsing and change management"
+license = "MIT"
+repository = "https://github.com/sheikh1309/ailyzer"
+keywords = ["code-analysis", "ai", "automation", "refactoring", "development-tools"]
+categories = ["development-tools", "command-line-utilities"]
+readme = "README.md"
 
 [dependencies]
-reqwest = { version = "0.12.19", features = ["json", "stream", "blocking"] }
+# Core async runtime
 tokio = { version = "1", features = ["full", "fs"] }
+
+# HTTP client for API calls
+reqwest = { version = "0.12.19", features = ["json", "stream", "blocking"] }
+
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Async utilities
 futures = "0.3"
+
+# Configuration parsing
 toml = "0.8"
+
+# System utilities
 dirs = "6.0.0"
-clap = { version = "4.5.40", features = ["derive"] }
 terminal_size = "0.4.2"
+
+# CLI framework
+clap = { version = "4.5.40", features = ["derive"] }
+
+# Logging (always included)
+log = "0.4"
+env_logger = "0.10"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Performance and utilities
+rayon = { version = "1.7", optional = true }          # Parallel processing
+dashmap = { version = "5.5", optional = true }        # Concurrent hash maps
+once_cell = "1.18"     # Lazy static initialization
+uuid = { version = "1.4", features = ["v4"] }  # Unique identifiers
+
+# File watching (for future features)
+notify = { version = "6.1", optional = true }
+
+# Compression (for caching)
+flate2 = { version = "1.0", optional = true }
+
+# Time utilities
+chrono = { version = "0.4", features = ["serde"] }
+
+# Optional dependencies for features
+warp = { version = "0.3", optional = true }
+tokio-tungstenite = { version = "0.20", optional = true }
+libloading = { version = "0.8", optional = true }
+prometheus = { version = "0.13", optional = true }
+
+[dev-dependencies]
+# Testing utilities
+tempfile = "3.8"
+tokio-test = "0.4"
+criterion = "0.5"      # Benchmarking
+proptest = "1.2"       # Property-based testing
+mockall = "0.11"       # Mocking framework
+
+[features]
+default = ["parallel-processing"]
+
+# Feature flags for optional functionality
+parallel-processing = ["rayon", "dashmap"]
+web-dashboard = ["warp", "tokio-tungstenite"]  # Future web interface
+plugin-system = ["libloading"]                 # Future plugin support
+metrics = ["prometheus"]                       # Future metrics collection
+caching = ["flate2"]                          # Enhanced caching
+file-watching = ["notify"]                    # File system monitoring
+
+# Build configuration
+[profile.release]
+# Optimize for performance
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+# Faster compilation for development
+opt-level = 0
+debug = true
+split-debuginfo = "unpacked"
+
+[profile.test]
+# Optimize tests for faster execution
+opt-level = 1
+
+# Benchmark profile
+[profile.bench]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+
+# Binary configuration
+[[bin]]
+name = "ailyzer"
+path = "src/main.rs"
+
+# Test configuration
+[[test]]
+name = "integration"
+path = "tests/mod.rs"
+
+# Benchmark configuration (optional - only if you create these files)
+# [[bench]]
+# name = "parser_benchmarks"
+# harness = false
+# path = "benches/parser_benchmarks.rs"
+
+# [[bench]]
+# name = "file_modifier_benchmarks"
+# harness = false
+# path = "benches/file_modifier_benchmarks.rs"
+
+# Example configurations (optional - only if you create these files)
+# [[example]]
+# name = "basic_analysis"
+# path = "examples/basic_analysis.rs"
+
+# [[example]]
+# name = "custom_parser"
+# path = "examples/custom_parser.rs"
+
+# [[example]]
+# name = "batch_processing"
+# path = "examples/batch_processing.rs"
+
+# Metadata for cargo
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# Custom build script configuration (optional)
+# [build-dependencies]
+# built = "0.7"  # Build-time information
+
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "consoleapi"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Linting configuration
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_imports = "warn"
+unused_variables = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+cargo = "warn"
+
+# Exceptions for specific clippy lints
+missing_errors_doc = "allow"      # Not all errors need docs
+missing_panics_doc = "allow"      # Not all panics need docs
+module_name_repetitions = "allow" # Sometimes necessary for clarity
+

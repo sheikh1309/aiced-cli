@@ -3,6 +3,7 @@ use std::rc::Rc;
 use terminal_size::{Width, terminal_size};
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
+use crate::errors::AilyzerResult;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
 
@@ -20,7 +21,7 @@ impl FileChangeLogger {
         }
     }
 
-    fn print_diff_preview(repository_config: Rc<RepositoryConfig>, file_path: &str, changes: &[LineChange]) -> Result<(), Box<dyn std::error::Error>> {
+    fn print_diff_preview(repository_config: Rc<RepositoryConfig>, file_path: &str, changes: &[LineChange]) -> AilyzerResult<()> {
         println!("\n🔥 Diff preview for {}:", file_path);
 
         let full_path = format!("{}/{}", repository_config.path, file_path).replace("//", "/");
@@ -187,7 +188,7 @@ impl FileChangeLogger {
         println!("🔥 {}", "─".repeat(50));
     }
 
-    pub fn print_change_summary(repository_config: Rc<RepositoryConfig>, change: &FileChange) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn print_change_summary(repository_config: Rc<RepositoryConfig>, change: &FileChange) -> AilyzerResult<()> {
         match change {
             FileChange::ModifyFile { file_path, reason, line_changes, .. } => {
                 println!("\n🔧 MODIFYING: {} - {}", file_path, reason);

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::fs;
 use futures::{stream, StreamExt};
 use reqwest::Client;
+use crate::errors::{AilyzerError, AilyzerResult};
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::structs::analyze_request::AnalyzeRequest;
@@ -43,7 +44,7 @@ impl RepoScanner {
         image_extensions.into_iter().map(String::from).collect()
     }
 
-    pub async fn scan_files(&self) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
+    pub async fn scan_files(&self) -> AilyzerResult<Vec<FileInfo>> {
         let patterns = self.load_gitignore(&self.repository_config.path).await?;
         let repo_files_paths = self.collect_file_paths(Path::new(&self.repository_config.path), &patterns).await?;
 
@@ -61,8 +62,7 @@ impl RepoScanner {
             .unwrap_or_default()
     }
 
-    async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        // Try to load from cache first
+    async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
         if let Some(cache) = FilesCache::load_from_file(cache_path)? {
             if cache.is_valid_for(&repo_files_paths) {
                 println!("📋 Using cached AI filter results ({} files)", cache.files.len());
@@ -70,11 +70,10 @@ impl RepoScanner {
             }
         }
 
-        // Cache miss - run AI filtering and update cache
         self.run_ai_filtering_and_cache(repo_files_paths, cache_path).await
     }
 
-    async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
         println!("🤖 Running AI filtering on {} files...", repo_files_paths.len());
 
         let filtered_paths = self.filter_files(repo_files_paths.clone()).await?;
@@ -86,7 +85,7 @@ impl RepoScanner {
         Ok(filtered_paths)
     }
 
-    async fn process_files(&self, file_paths: Vec<PathBuf>) -> Result<Vec<FileInfo>, Box<dyn std::error::Error>> {
+    async fn process_files(&self, file_paths: Vec<PathBuf>) -> AilyzerResult<Vec<FileInfo>> {
         println!("📁 Found {} files to analyze", file_paths.len());
 
         let total_files = file_paths.len();
@@ -125,7 +124,7 @@ impl RepoScanner {
         Ok(files)
     }
 
-    async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> AilyzerResult<Vec<PathBuf>> {
         let user_prompt = prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repository_config.path);
 
         let mut logger = AnimatedLogger::new("File Filtering".to_string());
@@ -145,7 +144,7 @@ impl RepoScanner {
             Err(e) => {
                 logger.stop("File filtering failed").await;
                 eprintln!("Network error during file filter request: {}", e);
-                return Err("Failed to connect to file filter server".into());
+                return Err(AilyzerError::system_error("analysis Error", &"Failed to connect to file filter server"));
             }
         };
 
@@ -154,7 +153,7 @@ impl RepoScanner {
             Err(e) => {
                 logger.stop("File filtering failed").await;
                 eprintln!("File filter request failed with status error: {}", e);
-                return Err(format!("File filter request failed: {}", e).into());
+                return Err(AilyzerError::system_error("analysis Error", &format!("File filter request failed: {}", e)).into());
             }
         };
 
@@ -163,11 +162,17 @@ impl RepoScanner {
             Err(e) => {
                 logger.stop("File filtering failed").await;
                 eprintln!("Failed to parse file filter response: {}", e);
-                return Err("Invalid response format from file filter server".into());
+                return Err(AilyzerError::system_error("analysis Error", &"Invalid response format from file filter server").into());
             }
         };
 
-        let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(&body.data.unwrap().content)
+        let content = &body.data.unwrap().content
+            .replace("```json", "")
+            .replace("```", "")
+            .trim()
+            .to_string();
+
+        let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(content)
             .unwrap_or_else(|e| {
                 eprintln!("Failed to parse filtered files JSON: {}", e);
                 Vec::new()
@@ -183,7 +188,7 @@ impl RepoScanner {
         Ok(filtered_files_paths)
     }
 
-    async fn load_gitignore(&self, repo_path: &str) -> Result<HashSet<String>, Box<dyn std::error::Error>> {
+    async fn load_gitignore(&self, repo_path: &str) -> AilyzerResult<HashSet<String>> {
         let gitignore_path = format!("{}/.gitignore", repo_path);
         let mut patterns = self.get_default_image_patterns();
         patterns.insert(String::from(".git/"));
@@ -201,7 +206,7 @@ impl RepoScanner {
         Ok(patterns)
     }
 
-    async fn collect_file_paths(&self, dir: &Path, patterns: &HashSet<String>) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    async fn collect_file_paths(&self, dir: &Path, patterns: &HashSet<String>) -> AilyzerResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
         let mut dirs_to_process = vec![dir.to_path_buf()];
 

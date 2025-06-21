@@ -2,9 +2,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 use reqwest::Client;
+use crate::errors::{AilyzerError, AilyzerResult};
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::services::custom_parser::Parser;
+use crate::services::analysis_parser::AnalysisParser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
 use crate::structs::analyze_request::AnalyzeRequest;
@@ -31,7 +32,7 @@ impl CodeAnalyzer {
         }
     }
 
-    pub async fn analyze_repository(&self) -> Result<Rc<AnalyzeRepositoryResponse>, Box<dyn std::error::Error>> {
+    pub async fn analyze_repository(&self) -> AilyzerResult<Rc<AnalyzeRepositoryResponse>> {
         let files = self.repo_scanner.scan_files().await?;
         let user_prompt = prompt_generator::generate_analysis_user_prompt(files, &self.repository_config.path);
         let mut logger = AnimatedLogger::new("Analyzing Repository".to_string());
@@ -51,7 +52,7 @@ impl CodeAnalyzer {
             Err(e) => {
                 logger.stop("Analysis failed").await;
                 eprintln!("Network error during API request: {}", e);
-                return Err("Failed to connect to analysis server".into());
+                return Err(AilyzerError::system_error("analysis Error", "Failed to connect to analysis server").into());
             }
         };
 
@@ -62,50 +63,47 @@ impl CodeAnalyzer {
                     Err(e) => {
                         logger.stop("Analysis failed").await;
                         eprintln!("Failed to parse JSON response: {}", e);
-                        return Err("Invalid response format from server".into());
+                        return Err(AilyzerError::system_error("analysis Error", &"Invalid response format from server").into());
                     }
                 }
             },
             reqwest::StatusCode::REQUEST_TIMEOUT => {
                 logger.stop("Analysis failed").await;
                 eprintln!("Request timed out (408)");
-                return Err("Request timed out (408)".into());
+                return Err(AilyzerError::system_error("analysis Error", &"Request timed out (408)").into());
             },
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                 logger.stop("Analysis failed").await;
                 eprintln!("Request failed with status {}: {}", status, error_text);
-                return Err(format!("Request failed with status {}: {}", status, error_text).into());
+                return Err(AilyzerError::system_error("analysis Error", &format!("Request failed with status {}: {}", status, error_text)).into());
             }
         };
 
-        // Check if the API response indicates failure
         if !body.success {
             logger.stop("Analysis failed").await;
             eprintln!("API returned error: {}", body.message);
-            return Err(format!("Analysis failed: {}", body.message).into());
+            return Err(AilyzerError::system_error("analysis Error", &format!("Analysis failed: {}", body.message)).into());
         }
 
-        // Safely handle the data field
         let analyze_data = match &body.data {
             Some(data) => data,
             None => {
                 logger.stop("Analysis failed").await;
                 eprintln!("API response missing data field");
-                return Err("Invalid API response: missing data".into());
+                return Err(AilyzerError::system_error("analysis Error", &"API response missing data field").into());
             }
         };
 
         logger.stop("Analysis complete").await;
-        println!("{:?}", body);
 
         let full_content = &analyze_data.content;
-        let mut parser = Parser::new(&full_content);
-        let analysis = match parser.parse() {
+        let mut analysis_parser = AnalysisParser::new(&full_content);
+        let analysis = match analysis_parser.parse() {
             Ok(analysis) => analysis,
             Err(e) => {
                 eprintln!("Failed to parse custom format: {}", e);
-                return Err(format!("Failed to parse custom format: {}", e).into());
+                return Err(AilyzerError::system_error("analysis Error", &format!("Failed to parse custom format: {}", e)).into());
             }
         };
 
