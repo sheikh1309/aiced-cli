@@ -19,9 +19,7 @@ impl Parser {
     pub fn parse(&mut self) -> Result<AnalysisResponse, String> {
         let mut response = AnalysisResponse {
             analysis_summary: String::new(),
-            changes: Vec::new(),
-            security_issues: Vec::new(),
-            performance_improvements: Vec::new(),
+            changes: Vec::new()
         };
 
         response.analysis_summary = self.parse_summary()?;

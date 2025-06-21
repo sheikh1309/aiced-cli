@@ -4,7 +4,7 @@ use crate::structs::file_info::FileInfo;
 pub fn generate_analysis_user_prompt(files: Vec<FileInfo>, repo_path: &str) -> String {
     let estimated_size = files.iter().map(|f| f.content.len() * 2).sum::<usize>();
     let mut prompt = String::with_capacity(estimated_size);
-    prompt.push_str("Analyze this code:");
+    prompt.push_str("Analyze this code:\n");
 
     for file in files {
         let path = file.path.replace(repo_path, "");

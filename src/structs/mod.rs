@@ -1,6 +1,4 @@
 pub mod file_info;
-pub mod performance_improvement;
-pub mod security_issue;
 pub mod analysis_response;
 pub mod config;
 pub mod cli;
