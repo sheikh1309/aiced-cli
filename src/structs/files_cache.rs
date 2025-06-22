@@ -33,7 +33,7 @@ impl FilesCache {
         match toml::from_str::<Self>(&content) {
             Ok(cache) => Ok(Some(cache)),
             Err(_) => {
-                log::info!("⚠️ Invalid cache file format, recreating");
+                log::error!("⚠️ Invalid cache file format, recreating");
                 Ok(None)
             }
         }
@@ -52,10 +52,8 @@ impl FilesCache {
     }
 
     pub fn is_valid_for(&self, current_files: &[PathBuf]) -> bool {
-        // Check file count first (quick check)
         if self.total_files_count != current_files.len() {
-            log::info!("🔄 File count changed ({} -> {}), need to re-run AI filtering",
-                     self.total_files_count, current_files.len());
+            log::info!("🔄 File count changed ({} -> {}), need to re-run AI filtering", self.total_files_count, current_files.len());
             return false;
         }
 

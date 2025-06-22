@@ -61,7 +61,6 @@ summary_report = true
         let config_file_path = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
         fs::create_dir(&config_file_dir_path)?;
         fs::write(&config_file_path, sample_config)?;
-        log::info!("✅ Created sample multi-repo config at: {}", config_file_path.display());
         Ok(())
     }
 

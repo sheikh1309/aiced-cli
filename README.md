@@ -90,7 +90,7 @@ FileModifier::apply_changes_by_priority(config, &changes)?;
 // Apply only specific categories
 FileModifier::apply_changes_by_category(config, &changes, "SECURITY")?;
 
-// Apply only high-severity changes
+// Apply only high-_severity: _ changes
 FileModifier::apply_changes_by_severity(config, &changes, "high")?;
 ```
 

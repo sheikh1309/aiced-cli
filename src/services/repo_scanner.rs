@@ -61,7 +61,6 @@ impl RepoScanner {
     async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
         if let Some(cache) = FilesCache::load_from_file(cache_path)? {
             if cache.is_valid_for(&repo_files_paths) {
-                log::info!("📋 Using cached AI filter results ({} files)", cache.files.len());
                 return Ok(cache.to_path_bufs());
             }
         }
@@ -70,11 +69,8 @@ impl RepoScanner {
     }
 
     async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
-        log::info!("🤖 Running AI filtering on {} files...", repo_files_paths.len());
-
         let filtered_paths = self.filter_files(repo_files_paths.clone()).await?;
 
-        // Create and save cache
         let cache = FilesCache::from_data(&filtered_paths, &repo_files_paths);
         cache.save_to_file(cache_path)?;
 
@@ -82,11 +78,6 @@ impl RepoScanner {
     }
 
     async fn process_files(&self, file_paths: Vec<PathBuf>) -> AilyzerResult<Vec<FileInfo>> {
-        log::info!("📁 Found {} files to analyze", file_paths.len());
-
-        let total_files = file_paths.len();
-        let mut processed = 0;
-
         let files: Vec<FileInfo> = stream::iter(file_paths)
             .map(|path| async move {
                 match fs::read_to_string(&path).await {
@@ -103,20 +94,13 @@ impl RepoScanner {
             .buffer_unordered(self.max_concurrent_reads)
             .filter_map(|result| async move {
                 match result {
-                    Ok(file_info) => {
-                        processed += 1;
-                        if processed % 100 == 0 {
-                            log::info!("📊 Progress: {}/{} files processed", processed, total_files);
-                        }
-                        Some(file_info)
-                    }
+                    Ok(file_info) => Some(file_info),
                     Err(_) => None,
                 }
             })
             .collect()
             .await;
 
-        log::info!("✅ Processed {} files successfully", files.len());
         Ok(files)
     }
 

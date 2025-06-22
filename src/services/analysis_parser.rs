@@ -74,7 +74,6 @@ impl AnalysisParser {
 
         response.analysis_summary = self.parse_summary()?;
         while self.current < self.lines.len() {
-            log::info!("current line number: {}", self.current);
             if self.current_line().trim().is_empty() {
                 self.advance();
                 continue;
@@ -320,13 +319,9 @@ impl AnalysisParser {
             let line = self.current_line().trim();
 
             if line.starts_with(CONTENT_FIELD) {
-                // Debug: Log that we found CONTENT field
-                log::info!("🔍 Found CONTENT field at line {}", self.current + 1);
                 self.advance();
 
-                // FIXED: Use improved content parsing with better error handling
                 content = self.parse_content_until_fixed(END_CONTENT_MARKER)?;
-                log::info!("✅ Successfully parsed content block ({} chars)", content.len());
                 break;
             } else {
                 self.advance();
@@ -349,15 +344,11 @@ impl AnalysisParser {
         let mut content_lines = Vec::new();
         let start_line = self.current; // Track where we started for debugging
 
-        log::info!("🔍 Starting content parsing at line {}, looking for '{}'", start_line + 1, end_marker);
-
         while !self.is_eof() {
             let line = self.current_line();
             let trimmed_line = line.trim();
 
-            // Check if we found the end marker
             if trimmed_line == end_marker {
-                log::info!("✅ Found end marker '{}' at line {}", end_marker, self.current + 1);
                 self.advance(); // Move past the end marker
                 break;
             }
@@ -387,7 +378,6 @@ impl AnalysisParser {
         }
 
         let content = content_lines.join("\n");
-        log::info!("✅ Content parsing complete: {} lines, {} characters", content_lines.len(), content.len());
         Ok(content)
     }
 
