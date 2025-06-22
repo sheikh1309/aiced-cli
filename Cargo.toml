@@ -1,11 +1,11 @@
 [package]
-name = "ailyzer"
+name = "ailyzer-cli"
 version = "0.2.0"
 edition = "2021"
 authors = ["Ailyzer Team"]
 description = "AI-powered code analysis tool with enhanced parsing and change management"
 license = "MIT"
-repository = "https://github.com/sheikh1309/ailyzer"
+repository = "https://github.com/sheikh1309/ailyzer-cli"
 keywords = ["code-analysis", "ai", "automation", "refactoring", "development-tools"]
 categories = ["development-tools", "command-line-utilities"]
 readme = "README.md"
