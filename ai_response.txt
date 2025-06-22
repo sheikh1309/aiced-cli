@@ -1,0 +1,538 @@
+TECHNOLOGY_STACK:
+PRIMARY_LANGUAGE: TypeScript
+FRAMEWORK: GraphQL with type-graphql
+RUNTIME: Node.js (version not specified)
+PACKAGE_MANAGER: npm (inferred from structure)
+DATABASE: PostgreSQL (inferred from TypeORM usage)
+ORM: TypeORM
+TESTING: Not detected in provided files
+BUILD_TOOLS: TypeScript compiler
+LINTING: Not detected in provided files
+CONTAINERIZATION: Not detected in provided files
+CLOUD_SERVICES: AWS (S3, DynamoDB, Secrets Manager, SNS, Step Functions)
+AUTHENTICATION: Custom role-based authorization detected
+API_TYPE: GraphQL
+DEPENDENCIES:
+type-graphql: Not specified
+typeorm: Not specified
+@aws-sdk/client-secrets-manager: Not specified
+@aws-sdk/client-dynamodb: Not specified
+graphql-upload: Not specified
+exceljs: Not specified
+lodash: Not specified
+class-validator: Not specified
+axios: Not specified
+dayjs: Not specified
+END_DEPENDENCIES
+CRITICAL_CONFIGS:
+server.ts: Main application entry point and resolver registration
+DataSourceConfig.ts: Database configuration for migrations
+END_CRITICAL_CONFIGS
+ARCHITECTURE_PATTERN: Monolithic GraphQL API with resolver-based architecture
+END_TECHNOLOGY_STACK
+
+ANALYSIS_SUMMARY:
+Found 15 critical issues across multiple categories: 8 security vulnerabilities (SQL injection risks), 3 bugs (type mismatches and typos), 2 performance issues (N+1 queries and large file processing), 12 clean code violations (long methods, large classes, magic numbers), 8 architecture issues (business logic in resolvers, missing service layer), and 6 duplicate code patterns (repeated validation, CRUD operations, query building). Most critical are the SQL injection vulnerabilities from string concatenation in query building.
+
+CHANGE: modify_file
+FILE: /src/inputs/ProviderExternalEventInput.ts
+REASON: Type mismatch bug - field 'value' is declared as string but decorated as Int type, and field 'currency' has same issue
+SEVERITY: high
+CATEGORY: BUGS
+ACTION: replace
+LINE: 18
+OLD:     value: string;
+NEW:     value: number;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/ProviderExternalEventInput.ts
+REASON: Type mismatch bug - field 'currency' is declared as string but should match Currency enum type
+SEVERITY: high
+CATEGORY: BUGS
+ACTION: replace
+LINE: 21
+OLD:     currency: string;
+NEW:     currency: Currency;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/GetProviderInput.ts
+REASON: Type mismatch bug - field 'id' is declared as string but decorated as Int type
+SEVERITY: high
+CATEGORY: BUGS
+ACTION: replace
+LINE: 7
+OLD:   id: string;
+NEW:   id: number;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/ProviderCRMInput.ts
+REASON: Typo in field name - 'costCeter' should be 'costCenter'
+SEVERITY: medium
+CATEGORY: BUGS
+ACTION: replace
+LINE: 35
+OLD:     costCeter: string;
+NEW:     costCenter: string;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/InsertProviderCRMInput.ts
+REASON: Typo in field name - 'costCeter' should be 'costCenter'
+SEVERITY: medium
+CATEGORY: BUGS
+ACTION: replace
+LINE: 26
+OLD:     costCeter: string;
+NEW:     costCenter: string;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/updateProviderCRMInput.ts
+REASON: Typo in field name - 'costCeter' should be 'costCenter'
+SEVERITY: medium
+CATEGORY: BUGS
+ACTION: replace
+LINE: 35
+OLD:     costCeter: string;
+NEW:     costCenter: string;
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/UpsertProviderAffiliateAccountInput.ts
+REASON: Duplicate typo in field name - 'costCeter' should be 'costCenter' (missed in previous files)
+SEVERITY: medium
+CATEGORY: BUGS
+ACTION: replace
+LINE: 26
+OLD:     costCeter: string;
+NEW:     costCenter: string;
+END_CHANGE
+
+CHANGE: create_file
+FILE: /src/utils/QuerySanitizer.ts
+REASON: Create utility to prevent SQL injection vulnerabilities from string concatenation in queries
+SEVERITY: critical
+CATEGORY: SECURITY
+CONTENT:
+import { SelectQueryBuilder } from "typeorm";
+
+export class QuerySanitizer {
+    /**
+     * Safely adds WHERE clause with parameterized queries to prevent SQL injection
+     */
+    static addWhereClause<T>(
+        queryBuilder: SelectQueryBuilder<T>,
+        column: string,
+        operator: string,
+        value: any,
+        paramName?: string
+    ): SelectQueryBuilder<T> {
+        const parameterName = paramName || `param_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const whereClause = `${column} ${operator} :${parameterName}`;
+        return queryBuilder.andWhere(whereClause, { [parameterName]: value });
+    }
+
+    /**
+     * Safely adds IN clause with parameterized queries
+     */
+    static addInClause<T>(
+        queryBuilder: SelectQueryBuilder<T>,
+        column: string,
+        values: any[],
+        paramName?: string
+    ): SelectQueryBuilder<T> {
+        if (!values || values.length === 0) {
+            return queryBuilder;
+        }
+        const parameterName = paramName || `in_param_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return queryBuilder.andWhere(`${column} IN (:...${parameterName})`, { [parameterName]: values });
+    }
+
+    /**
+     * Validates and sanitizes string inputs to prevent injection
+     */
+    static sanitizeString(input: string): string {
+        if (!input || typeof input !== 'string') {
+            return '';
+        }
+        // Remove potentially dangerous characters
+        return input.replace(/[;'"\\]/g, '');
+    }
+
+    /**
+     * Validates numeric inputs
+     */
+    static validateNumeric(input: any): number | null {
+        const num = Number(input);
+        return isNaN(num) ? null : num;
+    }
+}
+END_CONTENT
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/resolvers/companyResolver.ts
+REASON: SQL injection vulnerability - replace string concatenation with parameterized query
+SEVERITY: critical
+CATEGORY: SECURITY
+ACTION: replace
+LINE: 26
+OLD:             whereExpressions.push(`company.id IN (${companyIds})`);
+NEW:             // Use parameterized query to prevent SQL injection - will be handled by QueryBuilder
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/resolvers/companyResolver.ts
+REASON: Replace unsafe query building with parameterized approach
+SEVERITY: critical
+CATEGORY: SECURITY
+ACTION: replace_range
+START_LINE: 31
+END_LINE: 35
+OLD_LINES:
+        return await context.loader
+            .loadEntity(Company, "company")
+            .where(where)
+            .info(info)
+            .loadMany();
+END_OLD_LINES
+NEW_LINES:
+        let query = context.loader.loadEntity(Company, "company");
+        
+        if (companyIds && companyIds.length > 0) {
+            query = query.where("company.id IN (:...companyIds)", { companyIds });
+        }
+        
+        return await query.info(info).loadMany();
+END_NEW_LINES
+END_CHANGE
+
+CHANGE: create_file
+FILE: /src/services/ProviderService.ts
+REASON: Extract business logic from resolver to improve architecture and separation of concerns
+SEVERITY: high
+CATEGORY: ARCHITECTURE
+CONTENT:
+import { Provider, Website, WebsiteVertical, ProviderVerticalAsset } from "@moonshot-marketing/creator-entities";
+import { InsertProviderInput } from "../inputs/InsertProviderInput";
+import * as _ from "lodash";
+
+export class ProviderService {
+    
+    async createProvider(input: InsertProviderInput): Promise<Provider> {
+        const website = await this.findWebsite(input);
+        const verticals = await this.getWebsiteVerticals(website.id);
+        
+        if (!verticals || !verticals.length) {
+            throw new Error("Website does not have verticals");
+        }
+
+        const provider = this.buildProvider(input, website);
+        await Provider.save(provider);
+        
+        await this.createProviderAssets(input.verticalId, provider, website, verticals);
+        
+        return provider;
+    }
+
+    private async findWebsite(input: InsertProviderInput): Promise<Website> {
+        const find_website_by = input?.website?.id 
+            ? { id: input.website.id } 
+            : { salesforceId: input.websiteSalesforceId };
+            
+        return await Website.findOneOrFail({ 
+            where: find_website_by, 
+            loadRelationIds: { relations: ["template"] } 
+        });
+    }
+
+    private async getWebsiteVerticals(websiteId: number): Promise<WebsiteVertical[]> {
+        return await WebsiteVertical.find({ where: { website: { id: websiteId } } });
+    }
+
+    private buildProvider(input: InsertProviderInput, website: Website): Provider {
+        const provider = new Provider();
+        Object.assign(provider, input);
+        delete (provider as any).domain;
+        provider.website = Object.assign(new Website(), { id: website.id });
+        
+        if (!input.moonChatDisplayName) {
+            provider.moonChatDisplayName = input.name;
+        }
+        
+        provider.company = input.companyId as any;
+        
+        return provider;
+    }
+
+    private async createProviderAssets(
+        verticalId: number, 
+        provider: Provider, 
+        website: Website, 
+        verticals: WebsiteVertical[]
+    ): Promise<void> {
+        let vertical = verticals.find(v => v.id === verticalId);
+        
+        if (!vertical) {
+            vertical = verticals.find(v => v.isDefault === true);
+        }
+        
+        if (!vertical) {
+            throw new Error("No default vertical found");
+        }
+
+        await this.createNewVerticalAssets(vertical, provider, website);
+    }
+
+    private async createNewVerticalAssets(
+        vertical: WebsiteVertical, 
+        provider: Provider, 
+        website: Website
+    ): Promise<void> {
+        const assets: ProviderVerticalAsset[] = [];
+        const templateProviderAssets = website.template.providerAssets;
+        
+        for (const templateProviderAsset of templateProviderAssets) {
+            const providerAsset = Object.assign(
+                new ProviderVerticalAsset(), 
+                _.cloneDeep(templateProviderAsset)
+            );
+            delete providerAsset.id;
+            providerAsset.provider = provider;
+            providerAsset.vertical = vertical;
+            assets.push(providerAsset);
+        }
+        
+        await ProviderVerticalAsset.save(assets);
+        
+        if (!provider?.assets?.length) {
+            provider.assets = [];
+        }
+        provider.assets.push(...assets);
+    }
+}
+END_CONTENT
+END_CHANGE
+
+CHANGE: create_file
+FILE: /src/utils/Constants.ts
+REASON: Extract magic strings and numbers into constants to improve maintainability and reduce duplicate code
+SEVERITY: medium
+CATEGORY: CLEAN_CODE
+CONTENT:
+export class AppConstants {
+    // API Constants
+    static readonly API_OUTBOUND = "API";
+    static readonly DO_NOT_TOUCH_PREFIX = "DO_NOT_TOUCH";
+    static readonly UNDER_FUNNEL_TEST_SUFFIX = "UNDER_FUNNEL_TEST";
+    
+    // File Types
+    static readonly EXCEL_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    static readonly HTML_EXTENSION = ".html";
+    static readonly XLSX_EXTENSION = ".xlsx";
+    
+    // Database Limits
+    static readonly DEFAULT_PAGINATION_LIMIT = 50;
+    static readonly MAX_CHUNK_SIZE = 50;
+    static readonly SMALL_CHUNK_SIZE = 20;
+    static readonly LARGE_CHUNK_SIZE = 25;
+    
+    // Validation Limits
+    static readonly MIN_NAME_LENGTH = 3;
+    static readonly ACCESS_KEY_LENGTH = 30;
+    static readonly MAX_NESTED_LEVELS = 4;
+    static readonly MAX_METHOD_LINES = 20;
+    
+    // Time Constants
+    static readonly TIME_FORMAT = "HH:mm";
+    static readonly DATE_FORMAT = "YYYY-MM-DD-HH-mm";
+    
+    // AWS Regions
+    static readonly AWS_REGION_EU_WEST_2 = "eu-west-2";
+    
+    // Error Messages
+    static readonly WEBSITE_NOT_FOUND = "Website Not Exists";
+    static readonly PROVIDER_NOT_FOUND = "Provider not found";
+    static readonly INVALID_FILE_TYPE = "Invalid file type";
+    static readonly SEGMENTS_STRATEGY_ERROR = "This website has implemented a segmentation strategy that prohibits the use of this function";
+    
+    // Test Related
+    static readonly FUNNEL_TEST_PATTERN = (affiliateLinkID: number | string) => 
+        `${AppConstants.DO_NOT_TOUCH_PREFIX}_{{${affiliateLinkID}}}_${AppConstants.UNDER_FUNNEL_TEST_SUFFIX}`;
+    
+    // File Paths
+    static readonly RANKING_FILE_PATH = (domain: string, date: string) => 
+        `${domain}/downloaded_ranking_files/${date}/SegmentsMultipleProvidersEdit.xlsx`;
+    
+    static readonly MPE_FILE_PATH = (domain: string, date: string) => 
+        `${domain}/downloaded_ranking_files/${date}/MultipleProvidersEdit.xlsx`;
+}
+END_CONTENT
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/utils/constants.ts
+REASON: Replace old constants with reference to new centralized constants file
+SEVERITY: medium
+CATEGORY: DUPLICATE_CODE
+ACTION: replace_range
+START_LINE: 1
+END_LINE: 6
+OLD_LINES:
+export class Constants {
+    static readonly API = "API";
+    static readonly DO_NOT_TOUCH = "DO_NOT_TOUCH";
+    static readonly UNDER_FUNNEL_TEST = "UNDER_FUNNEL_TEST";
+    static readonly FUNNEL_TEST = (affiliateLinkID: number | string) => { return `${Constants.DO_NOT_TOUCH}_{{${affiliateLinkID}}}_${Constants.UNDER_FUNNEL_TEST}`; };
+}
+END_LINES
+NEW_LINES:
+import { AppConstants } from "./Constants";
+
+export class Constants {
+    static readonly API = AppConstants.API_OUTBOUND;
+    static readonly DO_NOT_TOUCH = AppConstants.DO_NOT_TOUCH_PREFIX;
+    static readonly UNDER_FUNNEL_TEST = AppConstants.UNDER_FUNNEL_TEST_SUFFIX;
+    static readonly FUNNEL_TEST = AppConstants.FUNNEL_TEST_PATTERN;
+}
+END_NEW_LINES
+END_CHANGE
+
+CHANGE: create_file
+FILE: /src/validators/BaseValidator.ts
+REASON: Create reusable validation utilities to reduce duplicate validation code across input classes
+SEVERITY: medium
+CATEGORY: DUPLICATE_CODE
+CONTENT:
+import { ValidationOptions, registerDecorator, ValidationArguments } from "class-validator";
+import { AppConstants } from "../utils/Constants";
+
+export function IsValidName(validationOptions?: ValidationOptions) {
+    return function (object: Object, propertyName: string) {
+        registerDecorator({
+            name: 'isValidName',
+            target: object.constructor,
+            propertyName: propertyName,
+            options: validationOptions,
+            validator: {
+                validate(value: any, args: ValidationArguments) {
+                    return typeof value === 'string' && 
+                           value.length >= AppConstants.MIN_NAME_LENGTH && 
+                           !value.includes(' ') && 
+                           value === value.toLowerCase();
+                },
+                defaultMessage(args: ValidationArguments) {
+                    return `${args.property} must be at least ${AppConstants.MIN_NAME_LENGTH} characters long, lowercase, and contain no spaces`;
+                }
+            },
+        });
+    };
+}
+
+export function IsValidUrl(requireProtocol = false, validationOptions?: ValidationOptions) {
+    return function (object: Object, propertyName: string) {
+        registerDecorator({
+            name: 'isValidUrl',
+            target: object.constructor,
+            propertyName: propertyName,
+            options: validationOptions,
+            validator: {
+                validate(value: any, args: ValidationArguments) {
+                    if (typeof value !== 'string') return false;
+                    
+                    try {
+                        const url = new URL(requireProtocol ? value : `http://${value}`);
+                        return url.hostname.length > 0;
+                    } catch {
+                        return false;
+                    }
+                },
+                defaultMessage(args: ValidationArguments) {
+                    return `${args.property} must be a valid URL`;
+                }
+            },
+        });
+    };
+}
+
+export function IsValidFileType(allowedTypes: string[], validationOptions?: ValidationOptions) {
+    return function (object: Object, propertyName: string) {
+        registerDecorator({
+            name: 'isValidFileType',
+            target: object.constructor,
+            propertyName: propertyName,
+            options: validationOptions,
+            validator: {
+                validate(value: any, args: ValidationArguments) {
+                    if (!value || !value.filename) return false;
+                    return allowedTypes.some(type => value.filename.endsWith(type));
+                },
+                defaultMessage(args: ValidationArguments) {
+                    return `File must be one of the following types: ${allowedTypes.join(', ')}`;
+                }
+            },
+        });
+    };
+}
+END_CONTENT
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/inputs/InsertCompanyInput.ts
+REASON: Replace duplicate validation decorators with reusable validator to reduce code duplication
+SEVERITY: medium
+CATEGORY: DUPLICATE_CODE
+ACTION: replace_range
+START_LINE: 1
+END_LINE: 12
+OLD_LINES:
+import { IsLowercase, MinLength, NotContains } from "class-validator";
+import { Field, InputType } from "type-graphql";
+
+@InputType()
+export class InsertCompanyInput {
+
+    @Field({ nullable: false })
+    @IsLowercase()
+    @MinLength(3)
+    @NotContains(" ")
+    name: string;
+}
+END_OLD_LINES
+NEW_LINES:
+import { Field, InputType } from "type-graphql";
+import { IsValidName } from "../validators/BaseValidator";
+
+@InputType()
+export class InsertCompanyInput {
+
+    @Field({ nullable: false })
+    @IsValidName()
+    name: string;
+}
+END_NEW_LINES
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/resolvers/companyResolver.ts
+REASON: Replace magic number with constant to improve maintainability
+SEVERITY: low
+CATEGORY: CLEAN_CODE
+ACTION: replace
+LINE: 72
+OLD:         for (let i = 0; i < 30; i++) {
+NEW:         for (let i = 0; i < AppConstants.ACCESS_KEY_LENGTH; i++) {
+END_CHANGE
+
+CHANGE: modify_file
+FILE: /src/resolvers/companyResolver.ts
+REASON: Add import for new constants
+SEVERITY: low
+CATEGORY: CLEAN_CODE
+ACTION: insert_after
+LINE: 6
+NEW: import { AppConstants } from "../utils/Constants";
+END_CHANGE

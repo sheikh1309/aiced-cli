@@ -1,3 +1,4 @@
+use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
 use crate::adapters::ailyzer_adapter::AiLyzerAdapter;
@@ -32,9 +33,10 @@ impl CodeAnalyzer {
         logger.start();
 
         let request_body = AnalyzeRequest { prompt: user_prompt };
-        let analyze_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/analyze", &request_body, &mut logger, "Analysis").await?;
+        // let analyze_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/analyze", &request_body, &mut logger, "Analysis").await?;
         logger.stop("Analysis complete").await;
-        let mut analysis_parser = AnalysisParser::new(&analyze_data.data.unwrap().content);
+        let content = fs::read_to_string("ai_response.txt").unwrap();
+        let mut analysis_parser = AnalysisParser::new(&content);
         let analysis = analysis_parser.parse()?;
 
         Ok(Rc::new(AnalyzeRepositoryResponse {

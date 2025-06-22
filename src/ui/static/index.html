@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ailyzer - Interactive Diff Viewer</title>
+    <link rel="stylesheet" href="/static/diff-viewer.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+</head>
+<body>
+<div id="app">
+    <header class="header">
+        <div class="header-content">
+            <h1>🔍 Ailyzer - Code Changes Review</h1>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <span class="progress-text" id="progress-text">0 of 0 changes applied</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="file-list">
+                <h3>📁 Files to Review</h3>
+                <div id="file-tabs" class="file-tabs"></div>
+            </div>
+
+            <div class="actions-panel">
+                <h3>⚡ Quick Actions</h3>
+                <button id="apply-all" class="btn btn-primary">Apply All Changes</button>
+                <button id="apply-selected" class="btn btn-secondary">Apply Selected</button>
+                <button id="skip-all" class="btn btn-warning">Skip All</button>
+                <button id="complete" class="btn btn-success">Complete Review</button>
+            </div>
+        </div>
+
+        <div class="diff-container">
+            <div class="diff-header">
+                <div class="file-info">
+                    <span id="current-file-name">Select a file to review</span>
+                    <span id="file-type-badge" class="file-type-badge"></span>
+                </div>
+                <div class="diff-controls">
+                    <button id="prev-file" class="btn btn-small">← Previous</button>
+                    <button id="next-file" class="btn btn-small">Next →</button>
+                </div>
+            </div>
+
+            <div class="diff-panels">
+                <div class="diff-panel before-panel">
+                    <div class="panel-header">
+                        <h3>📄 Before</h3>
+                        <span class="line-count" id="before-line-count">0 lines</span>
+                    </div>
+                    <div class="code-container">
+                        <pre id="before-content" class="code-content"></pre>
+                    </div>
+                </div>
+
+                <div class="diff-panel after-panel">
+                    <div class="panel-header">
+                        <h3>✨ After (Preview)</h3>
+                        <span class="line-count" id="after-line-count">0 lines</span>
+                    </div>
+                    <div class="code-container">
+                        <pre id="after-content" class="code-content"></pre>
+                    </div>
+                </div>
+            </div>
+
+            <div class="changes-list">
+                <h3>🔧 Changes in this file</h3>
+                <div id="changes-container" class="changes-container">
+                    <p class="no-changes">No changes to display</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-info">
+            <span id="session-status">Session: Active</span>
+            <span id="repository-info">Repository: Loading...</span>
+        </div>
+        <div class="connection-status">
+            <span id="connection-status" class="connected">🟢 Connected</span>
+        </div>
+    </div>
+</div>
+
+<!-- Loading overlay -->
+<div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Loading diff session...</p>
+    </div>
+</div>
+
+<!-- Confirmation modal -->
+<div id="confirmation-modal" class="modal">
+    <div class="modal-content">
+        <h3 id="modal-title">Confirm Action</h3>
+        <p id="modal-message">Are you sure you want to perform this action?</p>
+        <div class="modal-actions">
+            <button id="modal-confirm" class="btn btn-primary">Confirm</button>
+            <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Pass session ID from server
+    window.SESSION_ID = '{{SESSION_ID}}';
+</script>
+<script src="/static/diff-viewer.js"></script>
+</body>
+</html>
+

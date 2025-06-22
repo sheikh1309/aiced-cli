@@ -7,10 +7,3 @@ pub struct CategoryStats {
     pub percentage: usize,
     pub is_high_impact: bool,
 }
-
-impl CategoryStats {
-    pub fn print(&self) {
-        let impact_indicator = if self.is_high_impact { "🔥" } else { "📝" };
-        log::info!("   {} {}: {} ({}%)", impact_indicator, self.category, self.count, self.percentage);
-    }
-}
