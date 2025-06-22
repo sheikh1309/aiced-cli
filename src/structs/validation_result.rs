@@ -8,21 +8,21 @@ pub struct ValidationResult {
 impl ValidationResult {
     pub fn print_summary(&self) {
         if self.is_valid {
-            println!("✅ Validation passed");
+            log::info!("✅ Validation passed");
         } else {
-            println!("❌ Validation failed with {} errors", self.errors.len());
+            log::info!("❌ Validation failed with {} errors", self.errors.len());
         }
 
         if !self.warnings.is_empty() {
-            println!("⚠️ {} warnings found", self.warnings.len());
+            log::info!("⚠️ {} warnings found", self.warnings.len());
         }
 
         for error in &self.errors {
-            println!("   ❌ {}", error);
+            log::info!("   ❌ {}", error);
         }
 
         for warning in &self.warnings {
-            println!("   ⚠️ {}", warning);
+            log::info!("   ⚠️ {}", warning);
         }
     }
 }

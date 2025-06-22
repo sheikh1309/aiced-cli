@@ -10,7 +10,6 @@ use crate::logger::file_change_logger::FileChangeLogger;
 use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
-use crate::structs::apply_result::ApplyResult;
 use crate::structs::config::config::Config;
 use crate::structs::change_statistics::ChangeStatistics;
 
@@ -39,23 +38,23 @@ impl CommandRunner {
 
         if let Some(start) = self.start_time {
             let duration = start.elapsed();
-            println!("\n⏱️ Command completed in {:.2}s", duration.as_secs_f64());
+            log::info!("⏱️  Command completed in {:.2}s", duration.as_secs_f64());
         }
 
         result
     }
 
     async fn init_command(&self) -> AilyzerResult<()> {
-        println!("🚀 Initializing ailyzer configuration...");
+        log::info!("🚀 Initializing ailyzer configuration...");
 
         match ConfigManager::create_sample_multi_repo_config() {
             Ok(_) => {
-                println!("✅ Configuration file created successfully!");
-                println!("📝 Edit the configuration file to add your repositories.");
-                println!("🔧 Run 'ailyzer validate' to check your configuration.");
+                log::info!("✅ Configuration file created successfully!");
+                log::info!("📝 Edit the configuration file to add your repositories.");
+                log::info!("🔧 Run 'ailyzer validate' to check your configuration.");
             }
             Err(e) => {
-                eprintln!("❌ Failed to create configuration: {}", e);
+                log::error!("❌ Failed to create configuration: {}", e);
                 return Err(e);
             }
         }
@@ -64,22 +63,22 @@ impl CommandRunner {
     }
 
     async fn analyze_command(&self, repo: Option<String>, _tags: Vec<String>, _profile: Option<String>) -> AilyzerResult<()> {
-        println!("🔍 Starting code analysis...");
+        log::info!("🔍 Starting code analysis...");
 
         let config = match ConfigManager::load() {
             Ok(config) => config,
             Err(e) => {
-                eprintln!("❌ Failed to load configuration: {}", e);
-                eprintln!("💡 Run 'ailyzer init' to create a configuration file.");
+                log::error!("❌ Failed to load configuration: {}", e);
+                log::error!("💡 Run 'ailyzer init' to create a configuration file.");
                 return Err(e);
             }
         };
-        
+
         ConfigManager::validate_config(Rc::clone(&config))?;
 
         let mut results: Vec<Rc<AnalyzeRepositoryResponse>> = Vec::new();
         let mut manager = RepositoryManager::new(Rc::clone(&config));
-        
+
         if let Some(repo_name) = repo {
             self.analyze_single_repository(&mut manager, &repo_name, &mut results).await?;
         } else {
@@ -87,17 +86,17 @@ impl CommandRunner {
         }
 
         if results.is_empty() {
-            println!("⚠️ No repositories were successfully analyzed.");
-            println!("💡 Check the errors above and verify your configuration.");
+            log::info!("⚠️ No repositories were successfully analyzed.");
+            log::info!("💡 Check the errors above and verify your configuration.");
             return Ok(());
         }
 
-        println!("\n✅ Analysis complete for {} repositories", results.len());
-        
+        log::info!("✅ Analysis complete for {} repositories", results.len());
+
         for result in results {
             if let Err(e) = self.process_repository_result_enhanced(result, &config).await {
-                eprintln!("❌ Error processing repository results: {}", e);
-                eprintln!("   Continuing with next repository...");
+                log::error!("❌ Error processing repository results: {}", e);
+                log::error!("   Continuing with next repository...");
             }
         }
 
@@ -105,7 +104,7 @@ impl CommandRunner {
     }
 
     async fn analyze_single_repository(&self, manager: &mut RepositoryManager, repo_name: &str, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
-        println!("🎯 Analyzing repository: {}", repo_name);
+        log::info!("🎯 Analyzing repository: {}", repo_name);
         let repo_config = manager.config.repositories
             .iter()
             .find(|r| r.name == repo_name)
@@ -114,10 +113,10 @@ impl CommandRunner {
 
         match manager.analyze_repository(Arc::new(repo_config.clone()), results).await {
             Ok(_) => {
-                println!("✅ Successfully analyzed repository: {}", repo_config.name);
+                log::info!("✅ Successfully analyzed repository: {}", repo_config.name);
             }
             Err(e) => {
-                eprintln!("❌ Failed to analyze repository '{}': {}", repo_config.name, e);
+                log::error!("❌ Failed to analyze repository '{}': {}", repo_config.name, e);
                 return Err(e);
             }
         }
@@ -126,15 +125,15 @@ impl CommandRunner {
     }
 
     async fn analyze_all_repositories(&self, manager: &mut RepositoryManager, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
-        println!("🌍 Analyzing all configured repositories...");
+        log::info!("🌍 Analyzing all configured repositories...");
 
         match manager.analyze_all_repositories(results).await {
             Ok(_) => {
-                println!("✅ Successfully analyzed all repositories");
+                log::info!("✅ Successfully analyzed all repositories");
             }
             Err(e) => {
-                eprintln!("❌ Error during repository analysis: {}", e);
-                eprintln!("   Some repositories may have failed. Continuing with successful ones...");
+                log::error!("❌ Error during repository analysis: {}", e);
+                log::error!("   Some repositories may have failed. Continuing with successful ones...");
             }
         }
 
@@ -142,19 +141,16 @@ impl CommandRunner {
     }
 
     async fn process_repository_result_enhanced(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AilyzerResult<()> {
-        println!("\n{}", "=".repeat(60).as_str());
-        println!("📊 Processing results for: {}", result.repository_config.name);
-        println!("{}", "=".repeat(60));
+        log::info!("\n{}", "=".repeat(60).as_str());
+        log::info!("📊 Processing results for: {}", result.repository_config.name);
+        log::info!("{}", "=".repeat(60));
 
-        // Print analysis report
         FileChangeLogger::print_analysis_report(Rc::clone(&result));
 
-        // Get comprehensive statistics
         let stats = FileModifier::get_change_statistics(&result.repository_analysis.changes);
         stats.print_summary();
 
-        // Validate changes before applying
-        println!("\n🔍 Validating changes...");
+        log::info!("🔍 Validating changes...");
         let validation_result = FileModifier::validate_changes_batch(
             &result.repository_config,
             &result.repository_analysis.changes
@@ -163,11 +159,10 @@ impl CommandRunner {
         validation_result.print_summary();
 
         if !validation_result.is_valid {
-            println!("❌ Validation failed. Skipping this repository.");
+            log::info!("❌ Validation failed. Skipping this repository.");
             return Ok(());
         }
 
-        // Get user's application preference
         let application_mode = self.get_application_mode(&stats)?;
 
         let mut is_there_applied_changes = false;
@@ -189,7 +184,7 @@ impl CommandRunner {
                 is_there_applied_changes = self.apply_all_changes(&result).await?;
             }
             ApplicationMode::Skip => {
-                println!("⏭️ Skipping changes for this repository.");
+                log::info!("⏭️ Skipping changes for this repository.");
                 return Ok(());
             }
         }
@@ -202,30 +197,30 @@ impl CommandRunner {
     }
 
     fn get_application_mode(&self, stats: &ChangeStatistics) -> AilyzerResult<ApplicationMode> {
-        println!("\n🎯 How would you like to apply changes?");
+        log::info!("\n🎯 How would you like to apply changes?");
 
         match stats.get_application_strategy() {
             crate::structs::change_statistics::ApplicationStrategy::PriorityBased => {
-                println!("💡 Recommended: Priority-based application (security/bugs first)");
+                log::info!("💡 Recommended: Priority-based application (security/bugs first)");
             }
             crate::structs::change_statistics::ApplicationStrategy::SecurityFirst => {
-                println!("💡 Recommended: Security-first application");
+                log::info!("💡 Recommended: Security-first application");
             }
             crate::structs::change_statistics::ApplicationStrategy::CategoryBased => {
-                println!("💡 Recommended: Category-based application");
+                log::info!("💡 Recommended: Category-based application");
             }
             crate::structs::change_statistics::ApplicationStrategy::AllAtOnce => {
-                println!("💡 Recommended: Apply all changes at once");
+                log::info!("💡 Recommended: Apply all changes at once");
             }
         }
 
-        println!("\nOptions:");
-        println!("  1. 🎯 Priority-based (security → bugs → severity)");
-        println!("  2. 🏷️ Category-based (group by type)");
-        println!("  3. ⚡ Severity-based (high severity first)");
-        println!("  4. 📝 Individual review (one by one)");
-        println!("  5. 🚀 Apply all at once");
-        println!("  6. ⏭️ Skip this repository");
+        log::info!("\nOptions:");
+        log::info!("  1. 🎯 Priority-based (security → bugs → severity)");
+        log::info!("  2. 🏷️ Category-based (group by type)");
+        log::info!("  3. ⚡ Severity-based (high severity first)");
+        log::info!("  4. 📝 Individual review (one by one)");
+        log::info!("  5. 🚀 Apply all at once");
+        log::info!("  6. ⏭️ Skip this repository");
 
         print!("\nSelect option (1-6): ");
         io::stdout().flush()?;
@@ -241,226 +236,31 @@ impl CommandRunner {
             "5" => Ok(ApplicationMode::All),
             "6" => Ok(ApplicationMode::Skip),
             _ => {
-                println!("Invalid option, defaulting to priority-based application.");
+                log::info!("Invalid option, defaulting to priority-based application.");
                 Ok(ApplicationMode::Priority)
             }
         }
     }
 
-    async fn apply_changes_individually(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
-        println!("\n📝 Individual change review mode");
-        let mut applied_count = 0;
-
-        for (i, change) in result.repository_analysis.changes.iter().enumerate() {
-            println!("\n{}", "-".repeat(50).as_str());
-            println!("Change {} of {}", i + 1, result.repository_analysis.changes.len());
-
-            if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
-                eprintln!("❌ Error printing change summary: {}", e);
-                continue;
-            }
-
-            print!("\nApply this change? (y/N/q to quit): ");
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            match input.trim().to_lowercase().as_str() {
-                "y" | "yes" => {
-                    match FileModifier::apply_change_with_logging(Arc::new(result.repository_config.as_ref().clone()), change) {
-                        Ok(_) => {
-                            applied_count += 1;
-                            println!("✅ Change applied successfully");
-                        }
-                        Err(e) => {
-                            eprintln!("❌ Failed to apply change: {}", e);
-                        }
-                    }
-                }
-                "q" | "quit" => {
-                    println!("🛑 Stopping individual review.");
-                    break;
-                }
-                _ => {
-                    println!("⏭️ Skipping this change.");
-                }
-            }
-        }
-
-        println!("\n📊 Individual review complete: {} changes applied", applied_count);
-        Ok(applied_count > 0)
-    }
-
-    async fn apply_changes_by_priority(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
-        println!("\n🎯 Applying changes in priority order...");
-
-        let apply_result = FileModifier::apply_changes_by_priority(
-            Arc::new(result.repository_config.as_ref().clone()),
-            &result.repository_analysis.changes
-        )?;
-
-        self.print_apply_result(&apply_result);
-        Ok(apply_result.total_applied > 0)
-    }
-
-    async fn apply_changes_by_category(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
-        println!("\n🏷️ Category-based application");
-
-        let categories = ["SECURITY", "BUGS", "PERFORMANCE", "ARCHITECTURE", "CLEAN_CODE", "DUPLICATE_CODE"];
-        let mut total_applied = 0;
-
-        for category in &categories {
-            let category_changes: Vec<_> = result.repository_analysis.changes.iter()
-                .filter(|c| c.get_category().as_deref() == Some(category))
-                .collect();
-
-            if category_changes.is_empty() {
-                continue;
-            }
-
-            println!("\n📋 Category: {} ({} changes)", category, category_changes.len());
-            print!("Apply all {} changes? (y/N): ", category);
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if input.trim().to_lowercase() == "y" {
-                match FileModifier::apply_changes_by_category(
-                    Arc::new(result.repository_config.as_ref().clone()),
-                    &result.repository_analysis.changes,
-                    category
-                ) {
-                    Ok(applied) => {
-                        total_applied += applied;
-                        println!("✅ Applied {} changes for category {}", applied, category);
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to apply changes for category {}: {}", category, e);
-                    }
-                }
-            }
-        }
-
-        println!("\n📊 Category-based application complete: {} total changes applied", total_applied);
-        Ok(total_applied > 0)
-    }
-
-    async fn apply_changes_by_severity(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
-        println!("\n⚡ Severity-based application");
-
-        let severities = ["critical", "high", "medium", "low"];
-        let mut total_applied = 0;
-
-        for severity in &severities {
-            let severity_changes: Vec<_> = result.repository_analysis.changes.iter()
-                .filter(|c| c.get_severity() == *severity)
-                .collect();
-
-            if severity_changes.is_empty() {
-                continue;
-            }
-
-            println!("\n📊 Severity: {} ({} changes)", severity, severity_changes.len());
-            print!("Apply all {} changes? (y/N): ", severity);
-            io::stdout().flush()?;
-
-            let mut input = String::new();
-            io::stdin().read_line(&mut input)?;
-
-            if input.trim().to_lowercase() == "y" {
-                match FileModifier::apply_changes_by_severity(
-                    Arc::new(result.repository_config.as_ref().clone()),
-                    &result.repository_analysis.changes,
-                    severity
-                ) {
-                    Ok(applied) => {
-                        total_applied += applied;
-                        println!("✅ Applied {} changes for severity {}", applied, severity);
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to apply changes for severity {}: {}", severity, e);
-                    }
-                }
-            }
-        }
-
-        println!("\n📊 Severity-based application complete: {} total changes applied", total_applied);
-        Ok(total_applied > 0)
-    }
-
-    async fn apply_all_changes(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
-        println!("\n🚀 Applying all changes at once...");
-
-        // Show summary first
-        for change in &result.repository_analysis.changes {
-            if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
-                eprintln!("❌ Error printing change summary: {}", e);
-                continue;
-            }
-        }
-
-        print!("\nApply all {} changes? (y/N): ", result.repository_analysis.changes.len());
-        io::stdout().flush()?;
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input)?;
-
-        if input.trim().to_lowercase() == "y" {
-            let mut applied_count = 0;
-
-            for change in &result.repository_analysis.changes {
-                match FileModifier::apply_change_with_logging(Arc::new(result.repository_config.as_ref().clone()), change) {
-                    Ok(_) => {
-                        applied_count += 1;
-                    }
-                    Err(e) => {
-                        eprintln!("❌ Failed to apply change: {}", e);
-                    }
-                }
-            }
-
-            println!("\n📊 Bulk application complete: {} of {} changes applied",
-                     applied_count, result.repository_analysis.changes.len());
-            Ok(applied_count > 0)
-        } else {
-            println!("⏭️ Skipping all changes.");
-            Ok(false)
-        }
-    }
-
-    fn print_apply_result(&self, result: &ApplyResult) {
-        println!("\n📊 Priority Application Results:");
-        println!("   🔒 Security: {}", result.security_applied);
-        println!("   🐛 Bugs: {}", result.bugs_applied);
-        println!("   🚀 Performance: {}", result.performance_applied);
-        println!("   🏗️ Architecture: {}", result.architecture_applied);
-        println!("   ✨ Clean Code: {}", result.clean_code_applied);
-        println!("   🔄 Duplicate Code: {}", result.duplicate_code_applied);
-        println!("   ❌ Failed: {}", result.failed);
-        println!("   📈 Total Applied: {}", result.total_applied);
-    }
-
     async fn handle_post_application_workflow(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AilyzerResult<()> {
-        println!("\n🔄 Post-application workflow...");
+        log::info!("\n🔄 Post-application workflow...");
 
         // Create PR if enabled
         if result.repository_config.auto_pr {
             if let Err(e) = self.handle_pr_creation(Rc::clone(&result)).await {
-                eprintln!("❌ Failed to create PR: {}", e);
+                log::error!("❌ Failed to create PR: {}", e);
             }
         }
 
         // Save analysis results
         if let Err(e) = self.save_analysis_results(Rc::clone(&result)).await {
-            eprintln!("❌ Failed to save analysis results: {}", e);
+            log::error!("❌ Failed to save analysis results: {}", e);
         }
 
         // Send notifications
         if config.notifications.enabled {
             if let Err(e) = self.send_notifications(Rc::clone(&result)).await {
-                eprintln!("❌ Failed to send notifications: {}", e);
+                log::error!("❌ Failed to send notifications: {}", e);
             }
         }
 
@@ -482,35 +282,35 @@ impl CommandRunner {
     }
 
     async fn list_command(&self) -> AilyzerResult<()> {
-        println!("📋 Loading repository configuration...");
+        log::info!("📋 Loading repository configuration...");
 
         let config = ConfigManager::load()?;
 
-        println!("\n📋 Configured Repositories:");
-        println!("{}", "=".repeat(50));
+        log::info!("\n📋 Configured Repositories:");
+        log::info!("{}", "=".repeat(50));
 
         if config.repositories.is_empty() {
-            println!("⚠️ No repositories configured.");
-            println!("💡 Run 'ailyzer init' to create a configuration file.");
+            log::info!("⚠️ No repositories configured.");
+            log::info!("💡 Run 'ailyzer init' to create a configuration file.");
             return Ok(());
         }
 
         for (i, repo) in config.repositories.iter().enumerate() {
-            println!("{}. ✅ {}", i + 1, repo.name);
-            println!("   📁 Path: {}", repo.path);
-            println!("   🔧 Auto PR: {}", if repo.auto_pr { "✅" } else { "❌" });
+            log::info!("{}. ✅ {}", i + 1, repo.name);
+            log::info!("   📁 Path: {}", repo.path);
+            log::info!("   🔧 Auto PR: {}", if repo.auto_pr { "✅" } else { "❌" });
 
-            println!();
+            log::info!("\n");
         }
 
-        println!("📊 Total repositories: {}", config.repositories.len());
+        log::info!("📊 Total repositories: {}", config.repositories.len());
         Ok(())
     }
 
     async fn dashboard_command(&self, port: u16) -> AilyzerResult<()> {
-        println!("🌐 Starting ailyzer dashboard...");
-        println!("🚀 Dashboard will be available at: http://localhost:{}", port);
-        println!("⏹️ Press Ctrl+C to stop the dashboard");
+        log::info!("🌐 Starting ailyzer dashboard...");
+        log::info!("🚀 Dashboard will be available at: http://localhost:{}", port);
+        log::info!("⏹️ Press Ctrl+C to stop the dashboard");
 
         // TODO: Implement web dashboard
         // This would start a web server showing:
@@ -519,29 +319,29 @@ impl CommandRunner {
         // - Real-time analysis progress
         // - Configuration management UI
 
-        println!("🚧 Dashboard feature coming soon!");
-        println!("💡 For now, use the CLI commands to interact with ailyzer.");
+        log::info!("🚧 Dashboard feature coming soon!");
+        log::info!("💡 For now, use the CLI commands to interact with ailyzer.");
 
         Ok(())
     }
 
     async fn validate_command(&self) -> AilyzerResult<()> {
-        println!("🔍 Validating ailyzer configuration...");
+        log::info!("🔍 Validating ailyzer configuration...");
 
         let config = match ConfigManager::load() {
             Ok(config) => {
-                println!("✅ Configuration file loaded successfully");
+                log::info!("✅ Configuration file loaded successfully");
                 config
             }
             Err(e) => {
-                eprintln!("❌ Failed to load configuration: {}", e);
-                eprintln!("💡 Run 'ailyzer init' to create a configuration file.");
+                log::error!("❌ Failed to load configuration: {}", e);
+                log::error!("💡 Run 'ailyzer init' to create a configuration file.");
                 return Err(e);
             }
         };
         ConfigManager::validate_config(Rc::clone(&config))?;
-        println!("✅ Configuration is valid");
-        println!("📊 Found {} configured repositories", config.repositories.len());
+        log::info!("✅ Configuration is valid");
+        log::info!("📊 Found {} configured repositories", config.repositories.len());
 
         self.perform_extended_validation(&config).await?;
 
@@ -549,7 +349,7 @@ impl CommandRunner {
     }
 
     async fn perform_extended_validation(&self, config: &Config) -> AilyzerResult<()> {
-        println!("\n🔍 Performing extended validation...");
+        log::info!("\n🔍 Performing extended validation...");
 
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
@@ -580,19 +380,19 @@ impl CommandRunner {
 
         // Print results
         if issues.is_empty() && warnings.is_empty() {
-            println!("✅ Extended validation passed - no issues found");
+            log::info!("✅ Extended validation passed - no issues found");
         } else {
             if !issues.is_empty() {
-                println!("❌ Issues found:");
+                log::info!("❌ Issues found:");
                 for issue in &issues {
-                    println!("   - {}", issue);
+                    log::info!("   - {}", issue);
                 }
             }
 
             if !warnings.is_empty() {
-                println!("⚠️ Warnings:");
+                log::info!("⚠️ Warnings:");
                 for warning in &warnings {
-                    println!("   - {}", warning);
+                    log::info!("   - {}", warning);
                 }
             }
         }
@@ -601,18 +401,18 @@ impl CommandRunner {
     }
 
     async fn history_command(&self, repo: Option<String>, days: u32) -> AilyzerResult<()> {
-        println!("📜 Showing analysis history...");
+        log::info!("📜 Showing analysis history...");
 
         match repo {
             Some(repo_name) => {
-                println!("🎯 Repository: {}", repo_name);
+                log::info!("🎯 Repository: {}", repo_name);
             }
             None => {
-                println!("🌍 All repositories");
+                log::info!("🌍 All repositories");
             }
         }
 
-        println!("📅 Last {} days", days);
+        log::info!("📅 Last {} days", days);
 
         // TODO: Implement history functionality
         // This would show:
@@ -621,33 +421,238 @@ impl CommandRunner {
         // - Success/failure rates
         // - Performance metrics
 
-        println!("🚧 History feature coming soon!");
-        println!("💡 Analysis results will be stored and displayed here.");
+        log::info!("🚧 History feature coming soon!");
+        log::info!("💡 Analysis results will be stored and displayed here.");
 
         Ok(())
     }
 
     async fn create_pr(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>, branch: String) -> AilyzerResult<()> {
-        println!("  📨 Creating PR branch: {}", branch);
+        log::info!("  📨 Creating PR branch: {}", branch);
         // TODO: Implement PR creation
         Ok(())
     }
 
     pub async fn save_analysis_results(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AilyzerResult<()> {
-        println!("  💾 Saving analysis results...");
+        log::info!("  💾 Saving analysis results...");
         // TODO: Implement result saving
         Ok(())
     }
 
     async fn send_notifications(&self, analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AilyzerResult<()> {
-        println!("  📨 Sending notifications...");
+        log::info!("  📨 Sending notifications...");
         // TODO: Implement notifications (Slack, email, webhook)
         Ok(())
     }
-}
 
-impl Default for CommandRunner {
-    fn default() -> Self {
-        Self::new()
+    async fn apply_changes_individually(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+        log::info!("\n📝 Individual change review mode");
+        let mut approved_changes = Vec::new();
+
+        for (i, change) in result.repository_analysis.changes.iter().enumerate() {
+            log::info!("\n{}", "-".repeat(50).as_str());
+            log::info!("Change {} of {}", i + 1, result.repository_analysis.changes.len());
+
+            if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                log::error!("❌ Error printing change summary: {}", e);
+                continue;
+            }
+
+            print!("\nApprove this change? (y/N/q to quit): ");
+            io::stdout().flush()?;
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+
+            match input.trim().to_lowercase().as_str() {
+                "y" | "yes" => {
+                    approved_changes.push(change);
+                    log::info!("✅ Change approved");
+                }
+                "q" | "quit" => {
+                    log::info!("🛑 Stopping individual review.");
+                    break;
+                }
+                _ => {
+                    log::info!("⏭️ Skipping this change.");
+                }
+            }
+        }
+
+        if approved_changes.is_empty() {
+            log::info!("📊 No changes approved for application");
+            return Ok(false);
+        }
+
+        log::info!("\n🔧 Applying {} approved changes...", approved_changes.len());
+
+        match FileModifier::apply_changes_grouped_by_file(Arc::new(result.repository_config.as_ref().clone()), approved_changes) {
+            Ok(applied_count) => {
+                log::info!("✅ Successfully applied {} changes", applied_count);
+                Ok(applied_count > 0)
+            }
+            Err(e) => {
+                log::error!("❌ Failed to apply changes: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    async fn apply_changes_by_priority(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+        log::info!("\n🎯 Applying changes in priority order...");
+        match FileModifier::apply_changes_grouped_by_file(Arc::new(result.repository_config.as_ref().clone()), result.repository_analysis.changes.iter().collect()) {
+            Ok(applied_count) => {
+                log::info!("✅ Successfully applied {} changes", applied_count);
+                Ok(applied_count > 0)
+            }
+            Err(e) => {
+                log::error!("❌ Failed to apply changes: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    async fn apply_changes_by_category(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+        log::info!("\n🏷️ Category-based application");
+
+        let categories = ["SECURITY", "BUGS", "PERFORMANCE", "ARCHITECTURE", "CLEAN_CODE", "DUPLICATE_CODE"];
+        let mut all_approved_changes = Vec::new();
+
+        for category in &categories {
+            let category_changes: Vec<_> = result.repository_analysis.changes.iter()
+                .filter(|c| c.get_category().as_deref() == Some(category))
+                .collect();
+
+            if category_changes.is_empty() {
+                continue;
+            }
+
+            log::info!("\n📋 Category: {} ({} changes)", category, category_changes.len());
+
+            // Show changes in this category
+            for change in &category_changes.clone() {
+                if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                    log::error!("❌ Error printing change summary: {}", e);
+                }
+            }
+
+            print!("Apply all {} changes in category {}? (y/N): ", category_changes.len(), category);
+            io::stdout().flush()?;
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+
+            if input.trim().to_lowercase() == "y" {
+                all_approved_changes.extend(category_changes.clone());
+                log::info!("✅ Approved {} changes for category {}", category_changes.len(), category);
+            }
+        }
+
+        if all_approved_changes.is_empty() {
+            log::info!("📊 No changes approved for application");
+            return Ok(false);
+        }
+
+        log::info!("\n🔧 Applying {} approved changes...", all_approved_changes.len());
+
+        match FileModifier::apply_changes_grouped_by_file(Arc::new(result.repository_config.as_ref().clone()), all_approved_changes) {
+            Ok(applied_count) => {
+                log::info!("✅ Successfully applied {} changes", applied_count);
+                Ok(applied_count > 0)
+            }
+            Err(e) => {
+                log::error!("❌ Failed to apply changes: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    async fn apply_changes_by_severity(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+        log::info!("\n⚡ Severity-based application");
+
+        let severities = ["critical", "high", "medium", "low"];
+        let mut all_approved_changes = Vec::new();
+
+        // First, get user approval for each severity level
+        for severity in &severities {
+            let severity_changes: Vec<_> = result.repository_analysis.changes.iter()
+                .filter(|c| c.get_severity() == *severity)
+                .collect();
+
+            if severity_changes.is_empty() {
+                continue;
+            }
+
+            log::info!("\n📊 Severity: {} ({} changes)", severity, severity_changes.len());
+
+            // Show changes in this severity level
+            for change in &severity_changes {
+                if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                    log::error!("❌ Error printing change summary: {}", e);
+                }
+            }
+
+            print!("Apply all {} changes with {} severity? (y/N): ", severity_changes.len(), severity);
+            io::stdout().flush()?;
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input)?;
+
+            if input.trim().to_lowercase() == "y" {
+                all_approved_changes.extend(severity_changes.clone());
+                log::info!("✅ Approved {} changes for severity {}", severity_changes.len(), severity);
+            }
+        }
+
+        if all_approved_changes.is_empty() {
+            log::info!("📊 No changes approved for application");
+            return Ok(false);
+        }
+
+        log::info!("\n🔧 Applying {} approved changes...", all_approved_changes.len());
+
+        match FileModifier::apply_changes_grouped_by_file(Arc::new(result.repository_config.as_ref().clone()), all_approved_changes) {
+            Ok(applied_count) => {
+                log::info!("✅ Successfully applied {} changes", applied_count);
+                Ok(applied_count > 0)
+            }
+            Err(e) => {
+                log::error!("❌ Failed to apply changes: {}", e);
+                Err(e)
+            }
+        }
+    }
+
+    async fn apply_all_changes(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+        log::info!("\n🚀 Applying all changes at once...");
+
+        for change in &result.repository_analysis.changes {
+            if let Err(e) = FileChangeLogger::print_change_summary(Rc::clone(&result.repository_config), change) {
+                log::error!("❌ Error printing change summary: {}", e);
+                continue;
+            }
+        }
+
+        print!("\nApply all {} changes? (y/N): ", result.repository_analysis.changes.len());
+        io::stdout().flush()?;
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+
+        if input.trim().to_lowercase() == "y" {
+            match FileModifier::apply_changes_grouped_by_file(Arc::new(result.repository_config.as_ref().clone()), result.repository_analysis.changes.iter().collect()) {
+                Ok(applied_count) => {
+                    log::info!("\n📊 Bulk application complete: {} changes applied", applied_count);
+                    Ok(applied_count > 0)
+                }
+                Err(e) => {
+                    log::error!("❌ Failed to apply changes: {}", e);
+                    Err(e)
+                }
+            }
+        } else {
+            log::info!("⏭️ Skipping all changes.");
+            Ok(false)
+        }
     }
 }

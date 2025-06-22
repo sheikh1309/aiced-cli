@@ -1,12 +1,9 @@
 use crate::structs::stack_recommendation::StackRecommendation;
-use crate::structs::parse_error::ParseError;
 use std::collections::HashMap;
+use crate::errors::{AilyzerError, AilyzerResult};
 
-// Stack recommendation markers
 const RECOMMENDED_STACK_MARKER: &str = "RECOMMENDED_STACK:";
 const END_RECOMMENDED_STACK_MARKER: &str = "END_RECOMMENDED_STACK";
-
-// Field markers
 const PRIMARY_LANGUAGE_FIELD: &str = "PRIMARY_LANGUAGE:";
 const LANGUAGE_REASON_FIELD: &str = "LANGUAGE_REASON:";
 const FRAMEWORK_FIELD: &str = "FRAMEWORK:";
@@ -31,8 +28,6 @@ const SECURITY_RECOMMENDATIONS_FIELD: &str = "SECURITY_RECOMMENDATIONS:";
 const DEPLOYMENT_STRATEGY_FIELD: &str = "DEPLOYMENT_STRATEGY:";
 const LEARNING_CURVE_FIELD: &str = "LEARNING_CURVE:";
 const MAINTENANCE_EFFORT_FIELD: &str = "MAINTENANCE_EFFORT:";
-
-// Section markers
 const RECOMMENDED_DEPENDENCIES_MARKER: &str = "RECOMMENDED_DEPENDENCIES:";
 const END_RECOMMENDED_DEPENDENCIES_MARKER: &str = "END_RECOMMENDED_DEPENDENCIES";
 const ESSENTIAL_CONFIGS_MARKER: &str = "ESSENTIAL_CONFIGS:";
@@ -43,9 +38,7 @@ const DEVELOPMENT_WORKFLOW_MARKER: &str = "DEVELOPMENT_WORKFLOW:";
 const END_DEVELOPMENT_WORKFLOW_MARKER: &str = "END_DEVELOPMENT_WORKFLOW";
 
 pub struct StackRecommendationParser {
-    /// Input lines split by newlines
     lines: Vec<String>,
-    /// Current line index being processed
     current: usize,
 }
 
@@ -57,17 +50,13 @@ impl StackRecommendationParser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<StackRecommendation, ParseError> {
-        // Find the recommended stack marker
+    pub fn parse(&mut self) -> AilyzerResult<StackRecommendation> {
         while !self.is_eof() && !self.current_line().trim().starts_with(RECOMMENDED_STACK_MARKER) {
             self.advance();
         }
 
         if self.is_eof() {
-            return Err(ParseError::ParseError {
-                message: "Recommended stack marker not found".to_string(),
-                line: self.current,
-            });
+            return Err(AilyzerError::parse_error("Recommended stack", Some(self.current), "Recommended stack", Some(&"Recommended stack marker not found")));
         }
 
         self.expect_line(RECOMMENDED_STACK_MARKER)?;
@@ -156,7 +145,7 @@ impl StackRecommendationParser {
         Ok(recommendation)
     }
 
-    fn parse_dependency_section(&mut self, end_marker: &str) -> Result<HashMap<String, String>, ParseError> {
+    fn parse_dependency_section(&mut self, end_marker: &str) -> AilyzerResult<HashMap<String, String>> {
         let mut dependencies = HashMap::new();
 
         while !self.is_eof() && !self.current_line().trim().starts_with(end_marker) {
@@ -194,7 +183,7 @@ impl StackRecommendationParser {
         Ok(dependencies)
     }
 
-    fn parse_key_value_section(&mut self, end_marker: &str) -> Result<HashMap<String, String>, ParseError> {
+    fn parse_key_value_section(&mut self, end_marker: &str) -> AilyzerResult<HashMap<String, String>> {
         let mut map = HashMap::new();
 
         while !self.is_eof() && !self.current_line().trim().starts_with(end_marker) {
@@ -235,15 +224,11 @@ impl StackRecommendationParser {
         self.current >= self.lines.len()
     }
 
-    fn parse_field(&mut self, prefix: &str) -> Result<String, ParseError> {
+    fn parse_field(&mut self, prefix: &str) -> AilyzerResult<String> {
         let line = self.current_line();
         let value = line
             .strip_prefix(prefix)
-            .ok_or_else(|| ParseError::InvalidFormat {
-                line: self.current + 1,
-                expected: prefix.to_string(),
-                found: line.to_string(),
-            })?
+            .ok_or_else(|| AilyzerError::parse_error("InvalidFormat", Some(self.current), "InvalidFormat", Some(&line)))?
             .trim()
             .to_string();
 
@@ -251,14 +236,10 @@ impl StackRecommendationParser {
         Ok(value)
     }
 
-    fn expect_line(&self, expected: &str) -> Result<(), ParseError> {
+    fn expect_line(&self, expected: &str) -> AilyzerResult<()> {
         let line = self.current_line().trim();
         if !line.starts_with(expected) {
-            return Err(ParseError::InvalidFormat {
-                line: self.current + 1,
-                expected: expected.to_string(),
-                found: line.to_string(),
-            });
+            return Err(AilyzerError::parse_error("InvalidFormat", Some(self.current), "InvalidFormat", Some(&line)));
         }
         Ok(())
     }

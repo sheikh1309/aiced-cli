@@ -3,9 +3,8 @@ use crate::enums::line_change::LineChange;
 use crate::structs::analysis_response::AnalysisResponse;
 use crate::structs::technology_stack::TechnologyStack;
 use std::collections::HashMap;
-use crate::structs::parse_error::ParseError;
+use crate::errors::{AilyzerError, AilyzerResult};
 
-// Existing markers
 const ANALYSIS_SUMMARY_MARKER: &str = "ANALYSIS_SUMMARY:";
 const CHANGE_MARKER: &str = "CHANGE:";
 const END_CHANGE_MARKER: &str = "END_CHANGE";
@@ -24,8 +23,6 @@ const END_OLD_LINES_MARKER: &str = "END_OLD_LINES";
 const END_NEW_LINES_MARKER: &str = "END_NEW_LINES";
 const CONTENT_FIELD: &str = "CONTENT:";
 const END_CONTENT_MARKER: &str = "END_CONTENT";
-
-// New markers for enhanced functionality
 const TECHNOLOGY_STACK_MARKER: &str = "TECHNOLOGY_STACK:";
 const END_TECHNOLOGY_STACK_MARKER: &str = "END_TECHNOLOGY_STACK";
 const CATEGORY_FIELD: &str = "CATEGORY:";
@@ -33,7 +30,6 @@ const DEPENDENCIES_MARKER: &str = "DEPENDENCIES:";
 const END_DEPENDENCIES_MARKER: &str = "END_DEPENDENCIES";
 const CRITICAL_CONFIGS_MARKER: &str = "CRITICAL_CONFIGS:";
 const END_CRITICAL_CONFIGS_MARKER: &str = "END_CRITICAL_CONFIGS";
-
 const PRIMARY_LANGUAGE_FIELD: &str = "PRIMARY_LANGUAGE:";
 const FRAMEWORK_FIELD: &str = "FRAMEWORK:";
 const RUNTIME_FIELD: &str = "RUNTIME:";
@@ -48,15 +44,12 @@ const CLOUD_SERVICES_FIELD: &str = "CLOUD_SERVICES:";
 const AUTHENTICATION_FIELD: &str = "AUTHENTICATION:";
 const API_TYPE_FIELD: &str = "API_TYPE:";
 const ARCHITECTURE_PATTERN_FIELD: &str = "ARCHITECTURE_PATTERN:";
-
 const MODIFY_FILE_REQUIRED_FIELDS: &[&str] = &[FILE_FIELD, REASON_FIELD, SEVERITY_FIELD, CATEGORY_FIELD];
 const CREATE_FILE_REQUIRED_FIELDS: &[&str] = &[FILE_FIELD, REASON_FIELD, SEVERITY_FIELD, CATEGORY_FIELD];
 const DELETE_FILE_REQUIRED_FIELDS: &[&str] = &[FILE_FIELD, REASON_FIELD, SEVERITY_FIELD, CATEGORY_FIELD];
 
 pub struct AnalysisParser {
-    /// Input lines split by newlines
     lines: Vec<String>,
-    /// Current line index being processed
     current: usize,
 }
 
@@ -68,23 +61,20 @@ impl AnalysisParser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<AnalysisResponse, ParseError> {
+    pub fn parse(&mut self) -> AilyzerResult<AnalysisResponse> {
         let mut response = AnalysisResponse {
             technology_stack: None,
             analysis_summary: String::new(),
             changes: Vec::new()
         };
 
-        // Check if we have a technology stack section first
         if self.has_technology_stack() {
             response.technology_stack = Some(self.parse_technology_stack()?);
         }
 
-        // Parse the analysis summary
         response.analysis_summary = self.parse_summary()?;
-
-        // Parse all changes with error recovery
         while self.current < self.lines.len() {
+            log::info!("current line number: {}", self.current);
             if self.current_line().trim().is_empty() {
                 self.advance();
                 continue;
@@ -96,8 +86,7 @@ impl AnalysisParser {
                         response.changes.push(change);
                     }
                     Err(e) => {
-                        // Log error but continue parsing
-                        eprintln!("❌ Error parsing change at line {}: {}", self.current + 1, e);
+                        log::error!("❌ Error parsing change at line {}: {}", self.current + 1, e);
                         self.skip_to_next_change();
                     }
                 }
@@ -113,17 +102,13 @@ impl AnalysisParser {
         self.lines.iter().any(|line| line.trim().starts_with(TECHNOLOGY_STACK_MARKER))
     }
 
-    fn parse_technology_stack(&mut self) -> Result<TechnologyStack, ParseError> {
-        // Find the technology stack marker
+    fn parse_technology_stack(&mut self) -> AilyzerResult<TechnologyStack> {
         while !self.is_eof() && !self.current_line().trim().starts_with(TECHNOLOGY_STACK_MARKER) {
             self.advance();
         }
 
         if self.is_eof() {
-            return Err(ParseError::ParseError {
-                message: "Technology stack marker not found".to_string(),
-                line: self.current,
-            });
+            return Err(AilyzerError::parse_error("ParseError", Some(self.current), "ParseError", Some(&"Technology stack marker not found")));
         }
 
         self.expect_line(TECHNOLOGY_STACK_MARKER)?;
@@ -190,7 +175,7 @@ impl AnalysisParser {
         Ok(stack)
     }
 
-    fn parse_key_value_section(&mut self, end_marker: &str) -> Result<HashMap<String, String>, ParseError> {
+    fn parse_key_value_section(&mut self, end_marker: &str) -> AilyzerResult<HashMap<String, String>> {
         let mut map = HashMap::new();
 
         while !self.is_eof() && !self.current_line().trim().starts_with(end_marker) {
@@ -228,7 +213,6 @@ impl AnalysisParser {
             self.advance();
         }
 
-        // If we found END_CHANGE, move past it
         if self.current < self.lines.len() && self.current_line().starts_with(END_CHANGE_MARKER) {
             self.advance();
         }
@@ -246,17 +230,14 @@ impl AnalysisParser {
         self.current >= self.lines.len()
     }
 
-    fn parse_summary(&mut self) -> Result<String, ParseError> {
+    fn parse_summary(&mut self) -> AilyzerResult<String> {
         // Find the analysis summary marker
         while !self.is_eof() && !self.current_line().trim().starts_with(ANALYSIS_SUMMARY_MARKER) {
             self.advance();
         }
 
         if self.is_eof() {
-            return Err(ParseError::ParseError {
-                message: "Analysis summary marker not found".to_string(),
-                line: self.current,
-            });
+            return Err(AilyzerError::parse_error("ParseError", Some(self.current), "ParseError", Some(&"Analysis summary marker not found")));
         }
 
         self.expect_line(ANALYSIS_SUMMARY_MARKER)?;
@@ -274,24 +255,17 @@ impl AnalysisParser {
         }
 
         if summary_lines.is_empty() {
-            return Err(ParseError::ParseError {
-                message: "Analysis summary cannot be empty".to_string(),
-                line: self.current,
-            });
+            return Err(AilyzerError::parse_error("ParseError", Some(self.current), "ParseError", Some(&"Analysis summary marker not found")));
         }
 
         Ok(summary_lines.join("\n"))
     }
 
-    fn parse_change(&mut self) -> Result<FileChange, ParseError> {
+    fn parse_change(&mut self) -> AilyzerResult<FileChange> {
         let line = self.current_line().trim().to_string();
         let change_type = line
             .strip_prefix(CHANGE_MARKER)
-            .ok_or_else(|| ParseError::InvalidFormat {
-                line: self.current + 1,
-                expected: CHANGE_MARKER.to_string(),
-                found: line.to_string(),
-            })?
+            .ok_or_else(|| AilyzerError::parse_error("InvalidFormat", Some(self.current), "InvalidFormat", Some(&line)))?
             .trim();
 
         let current_line = self.current + 1; // Store for error reporting
@@ -301,14 +275,11 @@ impl AnalysisParser {
             "modify_file" => self.parse_modify_file(),
             "create_file" => self.parse_create_file(),
             "delete_file" => self.parse_delete_file(),
-            _ => Err(ParseError::UnknownChangeType {
-                change_type: change_type.to_string(),
-                line: current_line,
-            }),
+            _ => Err(AilyzerError::parse_error("UnknownChangeType", Some(current_line), "UnknownChangeType", Some(&change_type))),
         }
     }
 
-    fn parse_modify_file(&mut self) -> Result<FileChange, ParseError> {
+    fn parse_modify_file(&mut self) -> AilyzerResult<FileChange> {
         let fields = self.parse_required_fields(MODIFY_FILE_REQUIRED_FIELDS)?;
         let mut line_changes = Vec::new();
 
@@ -320,7 +291,7 @@ impl AnalysisParser {
                 match self.parse_line_action() {
                     Ok(action) => line_changes.push(action),
                     Err(e) => {
-                        eprintln!("⚠️ Warning: Failed to parse action at line {}: {}", self.current + 1, e);
+                        log::error!("⚠️  Warning: Failed to parse action at line {}: {}", self.current + 1, e);
                         self.skip_to_next_action();
                     }
                 }
@@ -341,17 +312,21 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_create_file(&mut self) -> Result<FileChange, ParseError> {
+    fn parse_create_file(&mut self) -> AilyzerResult<FileChange> {
         let fields = self.parse_required_fields(CREATE_FILE_REQUIRED_FIELDS)?;
         let mut content = String::new();
 
-        // Look for CONTENT field
         while !self.is_eof() && !self.current_line().starts_with(END_CHANGE_MARKER) {
             let line = self.current_line().trim();
 
             if line.starts_with(CONTENT_FIELD) {
+                // Debug: Log that we found CONTENT field
+                log::info!("🔍 Found CONTENT field at line {}", self.current + 1);
                 self.advance();
-                content = self.parse_content_until(END_CONTENT_MARKER)?;
+
+                // FIXED: Use improved content parsing with better error handling
+                content = self.parse_content_until_fixed(END_CONTENT_MARKER)?;
+                log::info!("✅ Successfully parsed content block ({} chars)", content.len());
                 break;
             } else {
                 self.advance();
@@ -370,7 +345,53 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_delete_file(&mut self) -> Result<FileChange, ParseError> {
+    fn parse_content_until_fixed(&mut self, end_marker: &str) -> AilyzerResult<String> {
+        let mut content_lines = Vec::new();
+        let start_line = self.current; // Track where we started for debugging
+
+        log::info!("🔍 Starting content parsing at line {}, looking for '{}'", start_line + 1, end_marker);
+
+        while !self.is_eof() {
+            let line = self.current_line();
+            let trimmed_line = line.trim();
+
+            // Check if we found the end marker
+            if trimmed_line == end_marker {
+                log::info!("✅ Found end marker '{}' at line {}", end_marker, self.current + 1);
+                self.advance(); // Move past the end marker
+                break;
+            }
+
+            // Add the line to content (preserve original formatting)
+            content_lines.push(line.to_string());
+            self.advance();
+
+            // Safety check: prevent infinite loops
+            if self.current - start_line > 10000 {
+                return Err(AilyzerError::parse_error(
+                    "ContentTooLarge",
+                    Some(self.current),
+                    "ContentTooLarge",
+                    Some(&format!("Content block too large (>10000 lines), possible missing {}", end_marker))
+                ));
+            }
+        }
+
+        if self.is_eof() {
+            return Err(AilyzerError::parse_error(
+                "UnexpectedEof",
+                Some(self.current),
+                "UnexpectedEof",
+                Some(&format!("looking for {} (started at line {})", end_marker, start_line + 1))
+            ));
+        }
+
+        let content = content_lines.join("\n");
+        log::info!("✅ Content parsing complete: {} lines, {} characters", content_lines.len(), content.len());
+        Ok(content)
+    }
+
+    fn parse_delete_file(&mut self) -> AilyzerResult<FileChange> {
         let fields = self.parse_required_fields(DELETE_FILE_REQUIRED_FIELDS)?;
 
         // Skip any remaining lines until END_CHANGE
@@ -389,14 +410,12 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_required_fields(&mut self, required_fields: &[&str]) -> Result<HashMap<String, String>, ParseError> {
+    fn parse_required_fields(&mut self, required_fields: &[&str]) -> AilyzerResult<HashMap<String, String>> {
         let mut fields = HashMap::new();
-
         while !self.is_eof() && !self.is_terminator() {
             let line = self.current_line().trim().to_string(); // Clone to avoid borrowing issues
             let mut found_field = false;
 
-            // Check if this line matches any required field
             for &field in required_fields {
                 if line.starts_with(field) {
                     let value = self.parse_field(field)?;
@@ -411,13 +430,9 @@ impl AnalysisParser {
             }
         }
 
-        // Validate all required fields are present
         for &field in required_fields {
             if !fields.contains_key(field) {
-                return Err(ParseError::MissingField {
-                    field: field.to_string(),
-                    line: self.current + 1,
-                });
+                return Err(AilyzerError::parse_error("MissingField", Some(self.current), "MissingField", Some(&field)));
             }
         }
 
@@ -426,14 +441,16 @@ impl AnalysisParser {
 
     fn is_terminator(&self) -> bool {
         let line = self.current_line().trim();
-        line.starts_with(END_CHANGE_MARKER) || line.starts_with(ACTION_FIELD)
+        line.starts_with(END_CHANGE_MARKER) ||
+            line.starts_with(ACTION_FIELD) ||
+            line.starts_with(CONTENT_FIELD)
     }
 
     fn is_recognized_field_static(line: &str) -> bool {
         const RECOGNIZED_FIELDS: &[&str] = &[
             FILE_FIELD, REASON_FIELD, SEVERITY_FIELD, CATEGORY_FIELD, ACTION_FIELD,
             LINE_FIELD, START_LINE_FIELD, END_LINE_FIELD,
-            OLD_FIELD, NEW_FIELD, CONTENT_FIELD
+            OLD_FIELD, NEW_FIELD, CONTENT_FIELD, NEW_LINES_MARKER
         ];
 
         RECOGNIZED_FIELDS.iter().any(|&field| line.starts_with(field))
@@ -450,7 +467,7 @@ impl AnalysisParser {
         }
     }
 
-    fn parse_line_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_line_action(&mut self) -> AilyzerResult<LineChange> {
         let action_type = self.parse_field(ACTION_FIELD)?;
         let current_line = self.current; // Store for error reporting
 
@@ -458,16 +475,16 @@ impl AnalysisParser {
             "replace" => self.parse_replace_action(),
             "insert_after" => self.parse_insert_after_action(),
             "insert_before" => self.parse_insert_before_action(),
+            "insert_many_after" => self.parse_insert_many_after_action(),
+            "insert_many_before" => self.parse_insert_many_before_action(),
             "delete" => self.parse_delete_action(),
+            "delete_many" => self.parse_delete_many_action(),
             "replace_range" => self.parse_replace_range_action(),
-            _ => Err(ParseError::UnknownActionType {
-                action_type,
-                line: current_line,
-            }),
+            _ => Err(AilyzerError::parse_error("UnknownActionType", Some(current_line), "UnknownActionType", Some(&action_type))),
         }
     }
 
-    fn parse_replace_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_replace_action(&mut self) -> AilyzerResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
         let old_content = self.parse_field(OLD_FIELD)?;
         let new_content = self.parse_field(NEW_FIELD)?;
@@ -479,7 +496,7 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_insert_after_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_insert_after_action(&mut self) -> AilyzerResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
         let new_content = self.parse_field(NEW_FIELD)?;
 
@@ -489,7 +506,7 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_insert_before_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_insert_before_action(&mut self) -> AilyzerResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
         let new_content = self.parse_field(NEW_FIELD)?;
 
@@ -499,7 +516,35 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_delete_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_insert_many_after_action(&mut self) -> AilyzerResult<LineChange> {
+        let line_number = self.parse_number_field(LINE_FIELD)?;
+
+        // Parse NEW_LINES block
+        self.expect_line(NEW_LINES_MARKER)?;
+        self.advance();
+        let new_lines = self.parse_lines_until(END_NEW_LINES_MARKER)?;
+
+        Ok(LineChange::InsertManyAfter {
+            line_number,
+            new_lines,
+        })
+    }
+
+    fn parse_insert_many_before_action(&mut self) -> AilyzerResult<LineChange> {
+        let line_number = self.parse_number_field(LINE_FIELD)?;
+
+        // Parse NEW_LINES block
+        self.expect_line(NEW_LINES_MARKER)?;
+        self.advance();
+        let new_lines = self.parse_lines_until(END_NEW_LINES_MARKER)?;
+
+        Ok(LineChange::InsertManyBefore {
+            line_number,
+            new_lines,
+        })
+    }
+
+    fn parse_delete_action(&mut self) -> AilyzerResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
 
         Ok(LineChange::Delete {
@@ -507,16 +552,37 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_replace_range_action(&mut self) -> Result<LineChange, ParseError> {
+    fn parse_delete_many_action(&mut self) -> AilyzerResult<LineChange> {
+        let start_line = self.parse_number_field(START_LINE_FIELD)?;
+        let end_line = self.parse_number_field(END_LINE_FIELD)?;
+
+        if start_line > end_line {
+            return Err(AilyzerError::parse_error(
+                "ParseError",
+                Some(self.current),
+                "InvalidFormat",
+                Some(&format!("Invalid line range: start_line ({}) > end_line ({})", start_line, end_line)))
+            );
+        }
+
+        Ok(LineChange::DeleteMany {
+            start_line,
+            end_line,
+        })
+    }
+
+    fn parse_replace_range_action(&mut self) -> AilyzerResult<LineChange> {
         let start_line = self.parse_number_field(START_LINE_FIELD)?;
         let end_line = self.parse_number_field(END_LINE_FIELD)?;
 
         // Validate line range
         if start_line > end_line {
-            return Err(ParseError::ParseError {
-                message: format!("Invalid line range: start_line ({}) > end_line ({})", start_line, end_line),
-                line: self.current,
-            });
+            return Err(AilyzerError::parse_error(
+                "ParseError",
+                Some(self.current),
+                "InvalidFormat",
+                Some(&format!("Invalid line range: start_line ({}) > end_line ({})", start_line, end_line)))
+            );
         }
 
         // Parse OLD_LINES block
@@ -537,15 +603,12 @@ impl AnalysisParser {
         })
     }
 
-    fn parse_field(&mut self, prefix: &str) -> Result<String, ParseError> {
+    fn parse_field(&mut self, prefix: &str) -> AilyzerResult<String> {
         let line = self.current_line();
+
         let value = line
             .strip_prefix(prefix)
-            .ok_or_else(|| ParseError::InvalidFormat {
-                line: self.current + 1,
-                expected: prefix.to_string(),
-                found: line.to_string(),
-            })?
+            .ok_or_else(|| AilyzerError::parse_error("InvalidFormat", Some(self.current + 1), "InvalidFormat", Some(&prefix.to_string())))?
             .trim()
             .to_string();
 
@@ -553,19 +616,13 @@ impl AnalysisParser {
         Ok(value)
     }
 
-    fn parse_number_field(&mut self, prefix: &str) -> Result<usize, ParseError> {
+    fn parse_number_field(&mut self, prefix: &str) -> AilyzerResult<usize> {
         let value = self.parse_field(prefix)?;
-        let line = self.current; // Store current line for error reporting
-
         value.parse::<usize>()
-            .map_err(|_| ParseError::InvalidNumber {
-                value,
-                field: prefix.to_string(),
-                line,
-            })
+            .map_err(|_| AilyzerError::parse_error("InvalidNumber", Some(self.current + 1), "InvalidNumber", Some(&value)))
     }
 
-    fn parse_lines_until(&mut self, end_marker: &str) -> Result<Vec<String>, ParseError> {
+    fn parse_lines_until(&mut self, end_marker: &str) -> AilyzerResult<Vec<String>> {
         let mut lines = Vec::new();
 
         while !self.is_eof() && !self.current_line().trim().starts_with(end_marker) {
@@ -574,9 +631,7 @@ impl AnalysisParser {
         }
 
         if self.is_eof() {
-            return Err(ParseError::UnexpectedEof {
-                context: format!("looking for {}", end_marker),
-            });
+            return Err(AilyzerError::parse_error("UnexpectedEof", Some(self.current + 1), "UnexpectedEof", Some(&format!("looking for {}", end_marker))));
         }
 
         self.expect_line(end_marker)?;
@@ -585,19 +640,10 @@ impl AnalysisParser {
         Ok(lines)
     }
 
-    fn parse_content_until(&mut self, end_marker: &str) -> Result<String, ParseError> {
-        let lines = self.parse_lines_until(end_marker)?;
-        Ok(lines.join("\n"))
-    }
-
-    fn expect_line(&self, expected: &str) -> Result<(), ParseError> {
+    fn expect_line(&self, expected: &str) -> AilyzerResult<()> {
         let line = self.current_line().trim();
         if !line.starts_with(expected) {
-            return Err(ParseError::InvalidFormat {
-                line: self.current + 1,
-                expected: expected.to_string(),
-                found: line.to_string(),
-            });
+            return Err(AilyzerError::parse_error("expect_line", Some(self.current + 1), expected, Some(line)));
         }
         Ok(())
     }

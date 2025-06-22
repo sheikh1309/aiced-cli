@@ -2,25 +2,18 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum ParseError {
-    /// A required field is missing from the input
     MissingField { field: String, line: usize },
 
-    /// The format at a specific line doesn't match expectations
     InvalidFormat { line: usize, expected: String, found: String },
 
-    /// A number field contains invalid data
     InvalidNumber { value: String, field: String, line: usize },
 
-    /// Input ended unexpectedly while parsing a specific context
     UnexpectedEof { context: String },
 
-    /// Unknown change type encountered
     UnknownChangeType { change_type: String, line: usize },
 
-    /// Unknown action type encountered
     UnknownActionType { action_type: String, line: usize },
 
-    /// General parsing error with context
     ParseError { message: String, line: usize },
 }
 

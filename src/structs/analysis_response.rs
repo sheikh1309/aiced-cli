@@ -10,14 +10,6 @@ pub struct AnalysisResponse {
 }
 
 impl AnalysisResponse {
-    pub fn has_technology_stack(&self) -> bool {
-        self.technology_stack.is_some()
-    }
-
-    pub fn get_change_count(&self) -> usize {
-        self.changes.len()
-    }
-
     pub fn get_changes_by_severity(&self, severity: &str) -> Vec<&FileChange> {
         self.changes.iter()
             .filter(|change| change.get_severity() == severity)
@@ -94,10 +86,6 @@ pub struct AnalysisStats {
 }
 
 impl AnalysisStats {
-    pub fn total_issues(&self) -> usize {
-        self.critical_count + self.high_count + self.medium_count + self.low_count + self.unknown_count
-    }
-
     pub fn high_priority_issues(&self) -> usize {
         self.critical_count + self.high_count
     }

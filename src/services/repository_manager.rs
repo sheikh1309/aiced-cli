@@ -23,7 +23,7 @@ impl RepositoryManager {
             .cloned()
             .collect();
 
-        println!("🚀 Analyzing {} repositories", enabled_repos.len());
+        log::info!("🚀 Analyzing {} repositories", enabled_repos.len());
 
         for (index, repo) in enabled_repos.iter().enumerate() {
             self.analyze_repository(Arc::new(repo.clone()), results).await?;
@@ -40,7 +40,7 @@ impl RepositoryManager {
     }
 
     pub async fn analyze_repository(&mut self, repository_config: Arc<RepositoryConfig>, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
-        println!("\n🔍 Analyzing repository: {}", repository_config.name);
+        log::info!("🔍 Analyzing repository: {}", repository_config.name);
         if repository_config.auto_pull {
             self.pull_repository(Arc::clone(&repository_config)).await?;
         }
@@ -55,7 +55,7 @@ impl RepositoryManager {
     async fn pull_repository(&self, repo: Arc<RepositoryConfig>) -> AilyzerResult<()> {
         use std::process::Command;
 
-        println!("  📥 Pulling latest changes...");
+        log::info!("  📥 Pulling latest changes...");
 
         let output = Command::new("git")
             .args(&["pull", "origin", repo.branch.as_deref().unwrap_or("main")])

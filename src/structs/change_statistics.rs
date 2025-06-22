@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 pub(crate) use crate::enums::application_strategy::ApplicationStrategy;
 use crate::enums::priority_recommendation::PriorityRecommendation;
+use crate::errors::AilyzerResult;
 use crate::structs::category_stats::CategoryStats;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -111,15 +112,15 @@ impl ChangeStatistics {
     }
 
     pub fn print_summary(&self) {
-        println!("\n📊 Change Analysis Summary");
-        println!("═══════════════════════════════════════");
+        log::info!("📊 Change Analysis Summary");
+        log::info!("═══════════════════════════════════════");
 
         // Overview
-        println!("📈 Overview:");
-        println!("   Total Changes: {}", self.total_count);
-        println!("   Total Line Changes: {}", self.total_line_changes);
-        println!("   Multi-line Changes: {}", self.multi_line_changes);
-        println!("   Files Affected: {}", self.files_affected.len());
+        log::info!("📈 Overview:");
+        log::info!("   Total Changes: {}", self.total_count);
+        log::info!("   Total Line Changes: {}", self.total_line_changes);
+        log::info!("   Multi-line Changes: {}", self.multi_line_changes);
+        log::info!("   Files Affected: {}", self.files_affected.len());
 
         // Risk Assessment
         let risk_score = self.calculate_risk_score();
@@ -130,96 +131,96 @@ impl ChangeStatistics {
             20..=39 => "🟢 LOW",
             _ => "⚪ MINIMAL",
         };
-        println!("\n🎯 Risk Assessment:");
-        println!("   Risk Score: {}/100 ({})", risk_score, risk_level);
-        println!("   Priority: {:?}", self.get_priority_recommendation());
-        println!("   Strategy: {:?}", self.get_application_strategy());
+        log::info!("🎯 Risk Assessment:");
+        log::info!("   Risk Score: {}/100 ({})", risk_score, risk_level);
+        log::info!("   Priority: {:?}", self.get_priority_recommendation());
+        log::info!("   Strategy: {:?}", self.get_application_strategy());
 
         // By Type
-        println!("\n📝 By Change Type:");
-        println!("   Modify Files: {}", self.modify_count);
-        println!("   Create Files: {}", self.create_count);
-        println!("   Delete Files: {}", self.delete_count);
+        log::info!("📝 By Change Type:");
+        log::info!("   Modify Files: {}", self.modify_count);
+        log::info!("   Create Files: {}", self.create_count);
+        log::info!("   Delete Files: {}", self.delete_count);
 
         // By Severity
-        println!("\n⚡ By Severity:");
-        println!("   Critical: {} 🔴", self.critical_count);
-        println!("   High: {} 🟠", self.high_count);
-        println!("   Medium: {} 🟡", self.medium_count);
-        println!("   Low: {} 🟢", self.low_count);
+        log::info!("⚡ By Severity:");
+        log::info!("   Critical: {} 🔴", self.critical_count);
+        log::info!("   High: {} 🟠", self.high_count);
+        log::info!("   Medium: {} 🟡", self.medium_count);
+        log::info!("   Low: {} 🟢", self.low_count);
         if self.unknown_severity_count > 0 {
-            println!("   Unknown: {} ⚪", self.unknown_severity_count);
+            log::info!("   Unknown: {} ⚪", self.unknown_severity_count);
         }
 
         // By Category
-        println!("\n🏷️ By Category:");
+        log::info!("🏷️  By Category:");
         if self.security_count > 0 {
-            println!("   Security: {} 🔒", self.security_count);
+            log::info!("   Security: {} 🔒", self.security_count);
         }
         if self.bugs_count > 0 {
-            println!("   Bugs: {} 🐛", self.bugs_count);
+            log::info!("   Bugs: {} 🐛", self.bugs_count);
         }
         if self.performance_count > 0 {
-            println!("   Performance: {} 🚀", self.performance_count);
+            log::info!("   Performance: {} 🚀", self.performance_count);
         }
         if self.architecture_count > 0 {
-            println!("   Architecture: {} 🏗️", self.architecture_count);
+            log::info!("   Architecture: {} 🏗️", self.architecture_count);
         }
         if self.clean_code_count > 0 {
-            println!("   Clean Code: {} ✨", self.clean_code_count);
+            log::info!("   Clean Code: {} ✨", self.clean_code_count);
         }
         if self.duplicate_code_count > 0 {
-            println!("   Duplicate Code: {} 🔄", self.duplicate_code_count);
+            log::info!("   Duplicate Code: {} 🔄", self.duplicate_code_count);
         }
         if self.other_category_count > 0 {
-            println!("   Other: {} 📦", self.other_category_count);
+            log::info!("   Other: {} 📦", self.other_category_count);
         }
 
         // Key Insights
-        println!("\n💡 Key Insights:");
+        log::info!("💡 Key Insights:");
         let high_priority = self.get_high_priority_count();
         let security_and_bugs = self.get_security_and_bugs_count();
 
         if security_and_bugs > 0 {
-            println!("   ⚠️ {} security/bug issues need immediate attention", security_and_bugs);
+            log::info!("   ⚠️ {} security/bug issues need immediate attention", security_and_bugs);
         }
 
         if high_priority > 0 {
-            println!("   🔥 {} high-priority changes should be applied first", high_priority);
+            log::info!("   🔥 {} high-priority changes should be applied first", high_priority);
         }
 
         if self.multi_line_changes > 0 {
             let percentage = (self.multi_line_changes * 100) / self.total_line_changes.max(1);
-            println!("   📏 {}% of line changes affect multiple lines", percentage);
+            log::info!("   📏 {}% of line changes affect multiple lines", percentage);
         }
 
         if let Some((file, count)) = &self.largest_file_impact {
-            println!("   📁 Most impacted file: {} ({} changes)", file, count);
+            log::info!("   📁 Most impacted file: {} ({} changes)", file, count);
         }
 
         // Recommendations
-        println!("\n🎯 Recommendations:");
+        log::info!("🎯 Recommendations:");
         match self.get_application_strategy() {
             ApplicationStrategy::PriorityBased => {
-                println!("   1. Apply security and bug fixes first");
-                println!("   2. Then apply high-severity changes");
-                println!("   3. Finally apply code quality improvements");
+                log::info!("   1. Apply security and bug fixes first");
+                log::info!("   2. Then apply high-severity changes");
+                log::info!("   3. Finally apply code quality improvements");
             }
             ApplicationStrategy::SecurityFirst => {
-                println!("   1. Focus on security issues immediately");
-                println!("   2. Review and apply other changes as time permits");
+                log::info!("   1. Focus on security issues immediately");
+                log::info!("   2. Review and apply other changes as time permits");
             }
             ApplicationStrategy::CategoryBased => {
-                println!("   1. Group changes by category for easier review");
-                println!("   2. Apply in batches to manage complexity");
+                log::info!("   1. Group changes by category for easier review");
+                log::info!("   2. Apply in batches to manage complexity");
             }
             ApplicationStrategy::AllAtOnce => {
-                println!("   1. Changes are manageable - can apply all at once");
-                println!("   2. Review carefully before applying");
+                log::info!("   1. Changes are manageable - can apply all at once");
+                log::info!("   2. Review carefully before applying");
             }
         }
 
-        println!("═══════════════════════════════════════\n");
+        log::info!("═══════════════════════════════════════\n");
     }
 
     pub fn print_compact_summary(&self) {
@@ -231,7 +232,7 @@ impl ChangeStatistics {
             _ => "🟢",
         };
 
-        println!("📊 {} changes | {} Risk: {}/100 | 🔒{} 🐛{} ⚡{} | Strategy: {:?}",
+        log::info!("📊 {} changes | {} Risk: {}/100 | 🔒{} 🐛{} ⚡{} | Strategy: {:?}",
                  self.total_count,
                  risk_emoji,
                  risk_score,
@@ -242,8 +243,8 @@ impl ChangeStatistics {
         );
     }
 
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+    pub fn to_json(&self) -> AilyzerResult<String> {
+        serde_json::to_string_pretty(self).map_err(Into::into)
     }
 
     pub fn get_category_stats(&self, category: &str) -> CategoryStats {

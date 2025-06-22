@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use futures::{stream, StreamExt};
-use reqwest::Client;
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::adapters::ailyzer_adapter::AiLyzerAdapter;
+use crate::errors::AilyzerResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::structs::analyze_request::AnalyzeRequest;
@@ -17,16 +17,12 @@ use crate::structs::files_cache::FilesCache;
 pub struct RepoScanner {
     repository_config: Arc<RepositoryConfig>,
     max_concurrent_reads: usize,
-    client: Client,
+    adapter: Arc<AiLyzerAdapter>
 }
 
 impl RepoScanner {
-    pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
-        Self {
-            repository_config,
-            max_concurrent_reads: 10,
-            client: Client::new(),
-        }
+    pub fn new(repository_config: Arc<RepositoryConfig>, adapter: Arc<AiLyzerAdapter>) -> Self {
+        Self { repository_config, max_concurrent_reads: 10, adapter  }
     }
 
     fn get_default_image_patterns(&self) -> HashSet<String> {
@@ -65,7 +61,7 @@ impl RepoScanner {
     async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
         if let Some(cache) = FilesCache::load_from_file(cache_path)? {
             if cache.is_valid_for(&repo_files_paths) {
-                println!("📋 Using cached AI filter results ({} files)", cache.files.len());
+                log::info!("📋 Using cached AI filter results ({} files)", cache.files.len());
                 return Ok(cache.to_path_bufs());
             }
         }
@@ -74,7 +70,7 @@ impl RepoScanner {
     }
 
     async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
-        println!("🤖 Running AI filtering on {} files...", repo_files_paths.len());
+        log::info!("🤖 Running AI filtering on {} files...", repo_files_paths.len());
 
         let filtered_paths = self.filter_files(repo_files_paths.clone()).await?;
 
@@ -86,7 +82,7 @@ impl RepoScanner {
     }
 
     async fn process_files(&self, file_paths: Vec<PathBuf>) -> AilyzerResult<Vec<FileInfo>> {
-        println!("📁 Found {} files to analyze", file_paths.len());
+        log::info!("📁 Found {} files to analyze", file_paths.len());
 
         let total_files = file_paths.len();
         let mut processed = 0;
@@ -99,7 +95,7 @@ impl RepoScanner {
                         content,
                     }),
                     Err(e) => {
-                        eprintln!("⚠️ Error reading {}: {}", path.display(), e);
+                        log::error!("⚠️ Error reading {}: {}", path.display(), e);
                         Err(e)
                     }
                 }
@@ -110,7 +106,7 @@ impl RepoScanner {
                     Ok(file_info) => {
                         processed += 1;
                         if processed % 100 == 0 {
-                            println!("📊 Progress: {}/{} files processed", processed, total_files);
+                            log::info!("📊 Progress: {}/{} files processed", processed, total_files);
                         }
                         Some(file_info)
                     }
@@ -120,7 +116,7 @@ impl RepoScanner {
             .collect()
             .await;
 
-        println!("✅ Processed {} files successfully", files.len());
+        log::info!("✅ Processed {} files successfully", files.len());
         Ok(files)
     }
 
@@ -131,42 +127,9 @@ impl RepoScanner {
         logger.start();
 
         let request_body = AnalyzeRequest { prompt: user_prompt };
+        let filter_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/files_filter", &request_body, &mut logger, "File filtering").await?;
 
-        let response = match self.client
-            .post("http://localhost:3000/api/files_filter")
-            .header("x-api-key", "api-key-123456")
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(e) => {
-                logger.stop("File filtering failed").await;
-                eprintln!("Network error during file filter request: {}", e);
-                return Err(AilyzerError::system_error("analysis Error", &"Failed to connect to file filter server"));
-            }
-        };
-
-        let response = match response.error_for_status() {
-            Ok(resp) => resp,
-            Err(e) => {
-                logger.stop("File filtering failed").await;
-                eprintln!("File filter request failed with status error: {}", e);
-                return Err(AilyzerError::system_error("analysis Error", &format!("File filter request failed: {}", e)).into());
-            }
-        };
-
-        let body: ApiResponse<AnalyzeResponse> = match response.json().await {
-            Ok(data) => data,
-            Err(e) => {
-                logger.stop("File filtering failed").await;
-                eprintln!("Failed to parse file filter response: {}", e);
-                return Err(AilyzerError::system_error("analysis Error", &"Invalid response format from file filter server").into());
-            }
-        };
-
-        let content = &body.data.unwrap().content
+        let content = &filter_data.data.unwrap().content
             .replace("```json", "")
             .replace("```", "")
             .trim()
@@ -174,7 +137,7 @@ impl RepoScanner {
 
         let filtered_files_paths: Vec<PathBuf> = serde_json::from_str::<Vec<String>>(content)
             .unwrap_or_else(|e| {
-                eprintln!("Failed to parse filtered files JSON: {}", e);
+                log::error!("Failed to parse filtered files JSON: {}", e);
                 Vec::new()
             })
             .into_iter()

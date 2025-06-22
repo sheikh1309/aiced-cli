@@ -1,8 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Duration;
-use reqwest::Client;
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::adapters::ailyzer_adapter::AiLyzerAdapter;
+use crate::errors::AilyzerResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::analysis_parser::AnalysisParser;
@@ -16,20 +15,14 @@ use crate::structs::config::repository_config::RepositoryConfig;
 pub struct CodeAnalyzer {
     repo_scanner: RepoScanner,
     repository_config: Arc<RepositoryConfig>,
-    client: Client
+    adapter: Arc<AiLyzerAdapter>,
 }
 
 impl CodeAnalyzer {
 
     pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
-        Self {
-            repo_scanner: RepoScanner::new(Arc::clone(&repository_config)),
-            repository_config,
-            client: Client::builder()
-                .connect_timeout(Duration::from_secs(20))
-                .timeout(Duration::from_secs(60 * 30)) // Increase from default
-                .build().unwrap(),
-        }
+        let adapter = Arc::new(AiLyzerAdapter::new("http://localhost:3000".to_string(), "api-key-123456".to_string()));
+        Self { repo_scanner: RepoScanner::new(Arc::clone(&repository_config), Arc::clone(&adapter)), repository_config, adapter }
     }
 
     pub async fn analyze_repository(&self) -> AilyzerResult<Rc<AnalyzeRepositoryResponse>> {
@@ -39,73 +32,10 @@ impl CodeAnalyzer {
         logger.start();
 
         let request_body = AnalyzeRequest { prompt: user_prompt };
-
-        let response = match self.client
-            .post("http://localhost:3000/api/analyze")
-            .header("x-api-key", "api-key-123456")
-            .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
-            Err(e) => {
-                logger.stop("Analysis failed").await;
-                eprintln!("Network error during API request: {}", e);
-                return Err(AilyzerError::system_error("analysis Error", "Failed to connect to analysis server").into());
-            }
-        };
-
-        let body: ApiResponse<AnalyzeResponse> = match response.status() {
-            reqwest::StatusCode::OK => {
-                match response.json().await {
-                    Ok(data) => data,
-                    Err(e) => {
-                        logger.stop("Analysis failed").await;
-                        eprintln!("Failed to parse JSON response: {}", e);
-                        return Err(AilyzerError::system_error("analysis Error", &"Invalid response format from server").into());
-                    }
-                }
-            },
-            reqwest::StatusCode::REQUEST_TIMEOUT => {
-                logger.stop("Analysis failed").await;
-                eprintln!("Request timed out (408)");
-                return Err(AilyzerError::system_error("analysis Error", &"Request timed out (408)").into());
-            },
-            status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                logger.stop("Analysis failed").await;
-                eprintln!("Request failed with status {}: {}", status, error_text);
-                return Err(AilyzerError::system_error("analysis Error", &format!("Request failed with status {}: {}", status, error_text)).into());
-            }
-        };
-
-        if !body.success {
-            logger.stop("Analysis failed").await;
-            eprintln!("API returned error: {}", body.message);
-            return Err(AilyzerError::system_error("analysis Error", &format!("Analysis failed: {}", body.message)).into());
-        }
-
-        let analyze_data = match &body.data {
-            Some(data) => data,
-            None => {
-                logger.stop("Analysis failed").await;
-                eprintln!("API response missing data field");
-                return Err(AilyzerError::system_error("analysis Error", &"API response missing data field").into());
-            }
-        };
-
+        let analyze_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/analyze", &request_body, &mut logger, "Analysis").await?;
         logger.stop("Analysis complete").await;
-
-        let full_content = &analyze_data.content;
-        let mut analysis_parser = AnalysisParser::new(&full_content);
-        let analysis = match analysis_parser.parse() {
-            Ok(analysis) => analysis,
-            Err(e) => {
-                eprintln!("Failed to parse custom format: {}", e);
-                return Err(AilyzerError::system_error("analysis Error", &format!("Failed to parse custom format: {}", e)).into());
-            }
-        };
+        let mut analysis_parser = AnalysisParser::new(&analyze_data.data.unwrap().content);
+        let analysis = analysis_parser.parse()?;
 
         Ok(Rc::new(AnalyzeRepositoryResponse {
             repository_analysis: Rc::new(analysis),
