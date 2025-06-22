@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use crate::errors::AilyzerResult;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FilesCache {
@@ -21,9 +22,9 @@ impl FilesCache {
         }
     }
 
-    pub fn load_from_file(cache_path: &Path) -> Result<Option<Self>, Box<dyn std::error::Error>> {
+    pub fn load_from_file(cache_path: &Path) -> AilyzerResult<Option<Self>> {
         if !cache_path.exists() {
-            println!("📋 No cache file found, running AI filtering for the first time");
+            log::info!("📋 No cache file found, running AI filtering for the first time");
             return Ok(None);
         }
 
@@ -32,29 +33,28 @@ impl FilesCache {
         match toml::from_str::<Self>(&content) {
             Ok(cache) => Ok(Some(cache)),
             Err(_) => {
-                println!("⚠️ Invalid cache file format, recreating");
+                log::info!("⚠️ Invalid cache file format, recreating");
                 Ok(None)
             }
         }
     }
 
-    pub fn save_to_file(&self, cache_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-        // Ensure directory exists
+    pub fn save_to_file(&self, cache_path: &Path) -> AilyzerResult<()> {
         if let Some(parent) = cache_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
 
-        let cache_content = toml::to_string_pretty(self)?;
+        let cache_content = toml::to_string_pretty(self).unwrap();
         std::fs::write(cache_path, cache_content)?;
 
-        println!("💾 Cache updated with {} filtered files", self.files.len());
+        log::info!("💾 Cache updated with {} filtered files", self.files.len());
         Ok(())
     }
 
     pub fn is_valid_for(&self, current_files: &[PathBuf]) -> bool {
         // Check file count first (quick check)
         if self.total_files_count != current_files.len() {
-            println!("🔄 File count changed ({} -> {}), need to re-run AI filtering",
+            log::info!("🔄 File count changed ({} -> {}), need to re-run AI filtering",
                      self.total_files_count, current_files.len());
             return false;
         }
@@ -68,7 +68,7 @@ impl FilesCache {
         let diff: HashSet<String> = cached_files.difference(&current_files_set).cloned().collect();
 
         if diff.len() > 0 {
-            println!("🔄 File list changed, need to re-run AI filtering");
+            log::info!("🔄 File list changed, need to re-run AI filtering");
             return false;
         }
 

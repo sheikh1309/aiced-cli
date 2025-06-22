@@ -1,17 +1,18 @@
 use std::path::Path;
 use std::fs;
 use std::rc::Rc;
+use crate::errors::{AilyzerError, AilyzerResult};
 use crate::structs::config::config::Config;
 
 pub struct ConfigManager;
 
 impl ConfigManager {
 
-    pub fn load() -> Result<Rc<Config>, Box<dyn std::error::Error>> {
+    pub fn load() -> AilyzerResult<Rc<Config>> {
         let config_locations = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
 
         if config_locations.exists() {
-            println!("📋 Loading config from: {}", config_locations.display());
+            log::info!("📋 Loading config from: {}", config_locations.display());
             let content = fs::read_to_string(&config_locations)?;
             let config: Config = toml::from_str(&content)?;
             return Ok(Rc::new(config));
@@ -20,7 +21,7 @@ impl ConfigManager {
         Ok(Rc::new(Config::default()))
     }
 
-    pub fn create_sample_multi_repo_config() -> Result<(), Box<dyn std::error::Error>> {
+    pub fn create_sample_multi_repo_config() -> AilyzerResult<()> {
         let sample_config = r#"# AiLyzer Multi-Repository Configuration
 
 [global]
@@ -60,11 +61,11 @@ summary_report = true
         let config_file_path = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
         fs::create_dir(&config_file_dir_path)?;
         fs::write(&config_file_path, sample_config)?;
-        println!("✅ Created sample multi-repo config at: {}", config_file_path.display());
+        log::info!("✅ Created sample multi-repo config at: {}", config_file_path.display());
         Ok(())
     }
 
-    pub fn validate_config(config: Rc<Config>) -> Result<(), Vec<String>> {
+    pub fn validate_config(config: Rc<Config>) -> AilyzerResult<()>  {
         let mut errors = Vec::new();
 
         for repo in &config.repositories {
@@ -84,7 +85,7 @@ summary_report = true
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(errors)
+            Err(AilyzerError::config_error("Config Error", Some(""), Some("")))
         }
     }
     

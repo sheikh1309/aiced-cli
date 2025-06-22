@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
+use crate::errors::{AilyzerError, AilyzerResult};
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::code_analyzer::CodeAnalyzer;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
@@ -16,13 +17,13 @@ impl RepositoryManager {
         Self { config }
     }
 
-    pub async fn analyze_all_repositories(&mut self, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn analyze_all_repositories(&mut self, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
         let enabled_repos: Vec<_> = self.config.repositories
             .iter()
             .cloned()
             .collect();
 
-        println!("🚀 Analyzing {} repositories", enabled_repos.len());
+        log::info!("🚀 Analyzing {} repositories", enabled_repos.len());
 
         for (index, repo) in enabled_repos.iter().enumerate() {
             self.analyze_repository(Arc::new(repo.clone()), results).await?;
@@ -38,8 +39,8 @@ impl RepositoryManager {
         Ok(())
     }
 
-    pub async fn analyze_repository(&mut self, repository_config: Arc<RepositoryConfig>, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> Result<(), Box<dyn std::error::Error>> {
-        println!("\n🔍 Analyzing repository: {}", repository_config.name);
+    pub async fn analyze_repository(&mut self, repository_config: Arc<RepositoryConfig>, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
+        log::info!("🔍 Analyzing repository: {}", repository_config.name);
         if repository_config.auto_pull {
             self.pull_repository(Arc::clone(&repository_config)).await?;
         }
@@ -51,10 +52,10 @@ impl RepositoryManager {
         Ok(())
     }
 
-    async fn pull_repository(&self, repo: Arc<RepositoryConfig>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn pull_repository(&self, repo: Arc<RepositoryConfig>) -> AilyzerResult<()> {
         use std::process::Command;
 
-        println!("  📥 Pulling latest changes...");
+        log::info!("  📥 Pulling latest changes...");
 
         let output = Command::new("git")
             .args(&["pull", "origin", repo.branch.as_deref().unwrap_or("main")])
@@ -62,7 +63,7 @@ impl RepositoryManager {
             .output()?;
 
         if !output.status.success() {
-            return Err(format!("Git pull failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+            return Err(AilyzerError::system_error("git pull", "Failed to pull latest changes").into());
         }
 
         Ok(())
