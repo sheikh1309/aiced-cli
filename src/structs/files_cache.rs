@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use crate::errors::AilyzerResult;
+use crate::errors::AicedResult;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FilesCache {
@@ -22,7 +22,7 @@ impl FilesCache {
         }
     }
 
-    pub fn load_from_file(cache_path: &Path) -> AilyzerResult<Option<Self>> {
+    pub fn load_from_file(cache_path: &Path) -> AicedResult<Option<Self>> {
         if !cache_path.exists() {
             log::info!("📋 No cache file found, running AI filtering for the first time");
             return Ok(None);
@@ -39,7 +39,7 @@ impl FilesCache {
         }
     }
 
-    pub fn save_to_file(&self, cache_path: &Path) -> AilyzerResult<()> {
+    pub fn save_to_file(&self, cache_path: &Path) -> AicedResult<()> {
         if let Some(parent) = cache_path.parent() {
             std::fs::create_dir_all(parent)?;
         }

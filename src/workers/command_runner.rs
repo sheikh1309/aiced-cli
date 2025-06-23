@@ -4,7 +4,7 @@ use std::io::{self, Write};
 use std::time::{Instant};
 use crate::enums::commands::Commands;
 use crate::config::config_manager::ConfigManager;
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::errors::{AicedError, AicedResult};
 use crate::services::file_modifier::FileModifier;
 use crate::services::repository_manager::RepositoryManager;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
@@ -22,7 +22,7 @@ impl CommandRunner {
         }
     }
 
-    pub async fn run_command(&mut self, command: Commands) -> AilyzerResult<()> {
+    pub async fn run_command(&mut self, command: Commands) -> AicedResult<()> {
         self.start_time = Some(Instant::now());
 
         let result = match command {
@@ -42,8 +42,8 @@ impl CommandRunner {
         result
     }
 
-    async fn init_command(&self) -> AilyzerResult<()> {
-        log::info!("🚀 Initializing ailyzer configuration...");
+    async fn init_command(&self) -> AicedResult<()> {
+        log::info!("🚀 Initializing aiced configuration...");
 
         match ConfigManager::create_sample_multi_repo_config() {
             Ok(_) => {
@@ -57,14 +57,14 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn analyze_command(&self, repo: Option<String>, _tags: Vec<String>, _profile: Option<String>) -> AilyzerResult<()> {
+    async fn analyze_command(&self, repo: Option<String>, _tags: Vec<String>, _profile: Option<String>) -> AicedResult<()> {
         log::info!("🔍 Starting code analysis...");
 
         let config = match ConfigManager::load() {
             Ok(config) => config,
             Err(e) => {
                 log::error!("❌ Failed to load configuration: {}", e);
-                log::error!("💡 Run 'ailyzer init' to create a configuration file.");
+                log::error!("💡 Run 'aiced init' to create a configuration file.");
                 return Err(e);
             }
         };
@@ -98,13 +98,13 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn analyze_single_repository(&self, manager: &mut RepositoryManager, repo_name: &str, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
+    async fn analyze_single_repository(&self, manager: &mut RepositoryManager, repo_name: &str, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AicedResult<()> {
         log::info!("🎯 Analyzing repository: {}", repo_name);
         let repo_config = manager.config.repositories
             .iter()
             .find(|r| r.name == repo_name)
             .cloned()
-            .ok_or_else(|| AilyzerError::repo_error(repo_name, "Line Wrong", "Repository not found"))?;
+            .ok_or_else(|| AicedError::repo_error(repo_name, "Line Wrong", "Repository not found"))?;
 
         match manager.analyze_repository(Arc::new(repo_config.clone()), results).await {
             Ok(_) => {
@@ -119,7 +119,7 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn analyze_all_repositories(&self, manager: &mut RepositoryManager, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AilyzerResult<()> {
+    async fn analyze_all_repositories(&self, manager: &mut RepositoryManager, results: &mut Vec<Rc<AnalyzeRepositoryResponse>>) -> AicedResult<()> {
         log::info!("🌍 Analyzing all configured repositories...");
 
         match manager.analyze_all_repositories(results).await {
@@ -135,7 +135,7 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn process_repository_result_enhanced(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AilyzerResult<()> {
+    async fn process_repository_result_enhanced(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AicedResult<()> {
         log::info!("📊 Processing results for: {}", result.repository_config.name);
 
         let validation_result = FileModifier::validate_changes_batch(
@@ -152,7 +152,7 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn handle_post_application_workflow(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AilyzerResult<()> {
+    async fn handle_post_application_workflow(&self, result: Rc<AnalyzeRepositoryResponse>, config: &Config) -> AicedResult<()> {
         if result.repository_config.auto_pr {
             if let Err(e) = self.handle_pr_creation(Rc::clone(&result)).await {
                 log::error!("❌ Failed to create PR: {}", e);
@@ -172,21 +172,21 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn handle_pr_creation(&self, result: Rc<AnalyzeRepositoryResponse>) -> AilyzerResult<()> {
-        print!("\n🌿 PR Branch name? (default: \"improvements/ailyzer-apply-changes\"): ");
+    async fn handle_pr_creation(&self, result: Rc<AnalyzeRepositoryResponse>) -> AicedResult<()> {
+        print!("\n🌿 PR Branch name? (default: \"improvements/aiced-apply-changes\"): ");
         io::stdout().flush()?;
 
         let mut branch = String::new();
         io::stdin().read_line(&mut branch)?;
 
         if branch.trim().is_empty() {
-            branch = "improvements/ailyzer-apply-changes".to_string();
+            branch = "improvements/aiced-apply-changes".to_string();
         }
 
         self.create_pr(result, branch.trim().to_string()).await
     }
 
-    async fn list_command(&self) -> AilyzerResult<()> {
+    async fn list_command(&self) -> AicedResult<()> {
         log::info!("📋 Loading repository configuration...");
 
         let config = ConfigManager::load()?;
@@ -196,7 +196,7 @@ impl CommandRunner {
 
         if config.repositories.is_empty() {
             log::info!("⚠️ No repositories configured.");
-            log::info!("💡 Run 'ailyzer init' to create a configuration file.");
+            log::info!("💡 Run 'aiced init' to create a configuration file.");
             return Ok(());
         }
 
@@ -212,8 +212,8 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn dashboard_command(&self, port: u16) -> AilyzerResult<()> {
-        log::info!("🌐 Starting ailyzer dashboard...");
+    async fn dashboard_command(&self, port: u16) -> AicedResult<()> {
+        log::info!("🌐 Starting aiced dashboard...");
         log::info!("🚀 Dashboard will be available at: http://localhost:{}", port);
         log::info!("⏹️ Press Ctrl+C to stop the dashboard");
 
@@ -227,14 +227,14 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn validate_command(&self) -> AilyzerResult<()> {
+    async fn validate_command(&self) -> AicedResult<()> {
         let config = match ConfigManager::load() {
             Ok(config) => {
                 config
             }
             Err(e) => {
                 log::error!("❌ Failed to load configuration: {}", e);
-                log::error!("💡 Run 'ailyzer init' to create a configuration file.");
+                log::error!("💡 Run 'aiced init' to create a configuration file.");
                 return Err(e);
             }
         };
@@ -244,7 +244,7 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn perform_extended_validation(&self, config: &Config) -> AilyzerResult<()> {
+    async fn perform_extended_validation(&self, config: &Config) -> AicedResult<()> {
         let mut issues = Vec::new();
         let mut warnings = Vec::new();
 
@@ -289,7 +289,7 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn history_command(&self, repo: Option<String>, days: u32) -> AilyzerResult<()> {
+    async fn history_command(&self, _repo: Option<String>, _days: u32) -> AicedResult<()> {
 
         // TODO: Implement history functionality
         // This would show:
@@ -304,25 +304,25 @@ impl CommandRunner {
         Ok(())
     }
 
-    async fn create_pr(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>, branch: String) -> AilyzerResult<()> {
+    async fn create_pr(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>, branch: String) -> AicedResult<()> {
         log::info!("  📨 Creating PR branch: {}", branch);
         // TODO: Implement PR creation
         Ok(())
     }
 
-    pub async fn save_analysis_results(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AilyzerResult<()> {
+    pub async fn save_analysis_results(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AicedResult<()> {
         log::info!("  💾 Saving analysis results...");
         // TODO: Implement result saving
         Ok(())
     }
 
-    async fn send_notifications(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AilyzerResult<()> {
+    async fn send_notifications(&self, _analyze_repository_response: Rc<AnalyzeRepositoryResponse>) -> AicedResult<()> {
         log::info!("  📨 Sending notifications...");
         // TODO: Implement notifications (Slack, email, webhook)
         Ok(())
     }
 
-    async fn apply_changes_individually(&self, result: &AnalyzeRepositoryResponse) -> AilyzerResult<bool> {
+    async fn apply_changes_individually(&self, result: &AnalyzeRepositoryResponse) -> AicedResult<bool> {
         log::info!("🌐 Starting interactive diff viewer...");
 
         let mut diff_server = DiffServer::new();

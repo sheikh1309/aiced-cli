@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::errors::{AicedError, AicedResult};
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::validation_result::ValidationResult;
 
@@ -13,7 +13,7 @@ pub struct FileModifier;
 
 impl FileModifier {
 
-    pub fn validate_changes_batch(repository_config: &RepositoryConfig, file_changes: &[FileChange]) -> AilyzerResult<ValidationResult> {
+    pub fn validate_changes_batch(repository_config: &RepositoryConfig, file_changes: &[FileChange]) -> AicedResult<ValidationResult> {
         let mut result = ValidationResult::default();
 
         let mut file_groups: HashMap<String, Vec<&FileChange>> = HashMap::new();
@@ -79,7 +79,7 @@ impl FileModifier {
         Ok(result)
     }
 
-    pub fn apply_change_with_logging(repository_config: Arc<RepositoryConfig>, file_change: &FileChange) -> AilyzerResult<()> {
+    pub fn apply_change_with_logging(repository_config: Arc<RepositoryConfig>, file_change: &FileChange) -> AicedResult<()> {
         match file_change {
             FileChange::ModifyFile { file_path, reason: _reason, severity: _severity, category: _category, line_changes } => {
                 let references: Rc<Vec<&LineChange>> = Rc::new(line_changes.iter().collect());
@@ -96,12 +96,12 @@ impl FileModifier {
         Ok(())
     }
 
-    pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AilyzerResult<()> {
+    pub fn apply_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AicedResult<()> {
         let str_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let full_path = Path::new(&*str_path);
 
         if !full_path.exists() {
-            return Err(AilyzerError::file_error(
+            return Err(AicedError::file_error(
                 full_path.to_str().unwrap(),
                 "not_found",
                 &format!("File does not exist: {}", full_path.display())
@@ -119,7 +119,7 @@ impl FileModifier {
         let mut lines = original_lines.clone();
         let mut cumulative_offset: i32 = 0;
 
-        for (change_index, change) in sorted_changes.iter().enumerate() {
+        for (_change_index, change) in sorted_changes.iter().enumerate() {
             let adjusted_change = Self::adjust_change_line_numbers(change, cumulative_offset);
 
             let line_offset = match &adjusted_change {
@@ -270,7 +270,7 @@ impl FileModifier {
         }
     }
 
-    pub fn validate_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AilyzerResult<()> {
+    pub fn validate_file_modifications(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AicedResult<()> {
         let full_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let content = fs::read_to_string(&full_path)?;
         let original_lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
@@ -279,7 +279,7 @@ impl FileModifier {
         Ok(())
     }
 
-    fn validate_changes(changes: Rc<Vec<&LineChange>>, lines: &[String], full_path: String) -> AilyzerResult<Vec<LineChange>> {
+    fn validate_changes(changes: Rc<Vec<&LineChange>>, lines: &[String], full_path: String) -> AicedResult<Vec<LineChange>> {
         let mut validated_changes = Vec::new();
 
         for (i, change) in changes.iter().enumerate() {
@@ -290,7 +290,7 @@ impl FileModifier {
                 Err(e) => {
                     log::error!("❌ Change in {} Failed, {}", full_path, e);
                     log::error!("❌ {}", e);
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         i.to_string().as_str(),
                         "Line Wrong",
@@ -303,11 +303,11 @@ impl FileModifier {
         Ok(validated_changes)
     }
 
-    fn validate_single_change(change: &LineChange, lines: &[String]) -> AilyzerResult<LineChange> {
+    fn validate_single_change(change: &LineChange, lines: &[String]) -> AicedResult<LineChange> {
         match change {
             LineChange::Replace { line_number, old_content, .. } => {
                 if *line_number == 0 || *line_number > lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -320,7 +320,7 @@ impl FileModifier {
                 let trimmed_expected = old_content.trim();
 
                 if trimmed_actual != trimmed_expected {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_content",
                         line_number.to_string().as_str(),
                         "Line Content mismatch",
@@ -332,7 +332,7 @@ impl FileModifier {
             }
             LineChange::InsertAfter { line_number, .. } => {
                 if *line_number > lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -343,7 +343,7 @@ impl FileModifier {
             }
             LineChange::InsertBefore { line_number, .. } => {
                 if *line_number == 0 || *line_number > lines.len() + 1 {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -355,7 +355,7 @@ impl FileModifier {
             // Validate multi-line insert actions
             LineChange::InsertManyAfter { line_number, new_lines } => {
                 if *line_number > lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -363,7 +363,7 @@ impl FileModifier {
                     ));
                 }
                 if new_lines.is_empty() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "new_lines",
                         line_number.to_string().as_str(),
                         "Empty Lines",
@@ -374,7 +374,7 @@ impl FileModifier {
             }
             LineChange::InsertManyBefore { line_number, new_lines } => {
                 if *line_number == 0 || *line_number > lines.len() + 1 {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -382,7 +382,7 @@ impl FileModifier {
                     ));
                 }
                 if new_lines.is_empty() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "new_lines",
                         line_number.to_string().as_str(),
                         "Empty Lines",
@@ -393,7 +393,7 @@ impl FileModifier {
             }
             LineChange::Delete { line_number } => {
                 if *line_number == 0 || *line_number > lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         line_number.to_string().as_str(),
                         "Line Wrong",
@@ -405,7 +405,7 @@ impl FileModifier {
             // Validate multi-line delete action
             LineChange::DeleteMany { start_line, end_line } => {
                 if *start_line == 0 || *end_line > lines.len() || start_line > end_line {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_range",
                         start_line.to_string().as_str(),
                         "Invalid Range",
@@ -416,7 +416,7 @@ impl FileModifier {
             }
             LineChange::ReplaceRange { start_line, end_line, old_content, .. } => {
                 if *start_line == 0 || *end_line > lines.len() || start_line > end_line {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         start_line.to_string().as_str(),
                         "Line Wrong",
@@ -427,7 +427,7 @@ impl FileModifier {
                 for (i, expected_line) in old_content.iter().enumerate() {
                     let line_index = (*start_line - 1) + i;
                     if line_index >= lines.len() {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             start_line.to_string().as_str(),
                             "Line Wrong",
@@ -437,7 +437,7 @@ impl FileModifier {
 
                     let actual_line = &lines[line_index];
                     if actual_line.trim() != expected_line.trim() {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             start_line.to_string().as_str(),
                             "Line Wrong",
@@ -451,7 +451,7 @@ impl FileModifier {
         }
     }
 
-    fn simulate_changes_application(changes: Rc<Vec<&LineChange>>, original_lines: &[String]) -> AilyzerResult<()> {
+    fn simulate_changes_application(changes: Rc<Vec<&LineChange>>, original_lines: &[String]) -> AicedResult<()> {
         let mut sorted_changes = changes.to_vec();
         sorted_changes.sort_by_key(|change| Self::get_change_line_number(change));
 
@@ -465,7 +465,7 @@ impl FileModifier {
                 LineChange::Replace { line_number, .. } |
                 LineChange::Delete { line_number } => {
                     if *line_number == 0 || *line_number > simulated_line_count {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             line_number.to_string().as_str(),
                             "Line Wrong",
@@ -476,7 +476,7 @@ impl FileModifier {
                 LineChange::InsertAfter { line_number, .. } |
                 LineChange::InsertManyAfter { line_number, .. } => {
                     if *line_number > simulated_line_count {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             line_number.to_string().as_str(),
                             "Line Wrong",
@@ -487,7 +487,7 @@ impl FileModifier {
                 LineChange::InsertBefore { line_number, .. } |
                 LineChange::InsertManyBefore { line_number, .. } => {
                     if *line_number == 0 || *line_number > simulated_line_count + 1 {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             line_number.to_string().as_str(),
                             "Line Wrong",
@@ -497,7 +497,7 @@ impl FileModifier {
                 }
                 LineChange::DeleteMany { start_line, end_line } => {
                     if *start_line == 0 || *end_line > simulated_line_count || start_line > end_line {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_range",
                             start_line.to_string().as_str(),
                             "Invalid Range",
@@ -507,7 +507,7 @@ impl FileModifier {
                 }
                 LineChange::ReplaceRange { start_line, end_line, .. } => {
                     if *start_line == 0 || *end_line > simulated_line_count || start_line > end_line {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             start_line.to_string().as_str(),
                             "Line Wrong",
@@ -569,9 +569,9 @@ impl FileModifier {
         }
     }
 
-    fn apply_replace(lines: &mut Vec<String>, line_number: usize, _old_content: &str, new_content: &str) -> AilyzerResult<()> {
+    fn apply_replace(lines: &mut Vec<String>, line_number: usize, _old_content: &str, new_content: &str) -> AicedResult<()> {
         if line_number == 0 || line_number > lines.len() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -584,9 +584,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_insert_after(lines: &mut Vec<String>, line_number: usize, new_content: &str) -> AilyzerResult<()> {
+    fn apply_insert_after(lines: &mut Vec<String>, line_number: usize, new_content: &str) -> AicedResult<()> {
         if line_number > lines.len() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -598,9 +598,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_insert_before(lines: &mut Vec<String>, line_number: usize, new_content: &str) -> AilyzerResult<()> {
+    fn apply_insert_before(lines: &mut Vec<String>, line_number: usize, new_content: &str) -> AicedResult<()> {
         if line_number == 0 || line_number > lines.len() + 1 {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -613,9 +613,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_insert_many_after(lines: &mut Vec<String>, line_number: usize, new_lines: &[String]) -> AilyzerResult<()> {
+    fn apply_insert_many_after(lines: &mut Vec<String>, line_number: usize, new_lines: &[String]) -> AicedResult<()> {
         if line_number > lines.len() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -624,7 +624,7 @@ impl FileModifier {
         }
 
         if new_lines.is_empty() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "new_lines",
                 line_number.to_string().as_str(),
                 "Empty Lines",
@@ -640,9 +640,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_insert_many_before(lines: &mut Vec<String>, line_number: usize, new_lines: &[String]) -> AilyzerResult<()> {
+    fn apply_insert_many_before(lines: &mut Vec<String>, line_number: usize, new_lines: &[String]) -> AicedResult<()> {
         if line_number == 0 || line_number > lines.len() + 1 {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -651,7 +651,7 @@ impl FileModifier {
         }
 
         if new_lines.is_empty() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "new_lines",
                 line_number.to_string().as_str(),
                 "Empty Lines",
@@ -668,9 +668,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_delete(lines: &mut Vec<String>, line_number: usize) -> AilyzerResult<()> {
+    fn apply_delete(lines: &mut Vec<String>, line_number: usize) -> AicedResult<()> {
         if line_number == 0 || line_number > lines.len() {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_number",
                 line_number.to_string().as_str(),
                 "Line Wrong",
@@ -683,9 +683,9 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_delete_many(lines: &mut Vec<String>, start_line: usize, end_line: usize) -> AilyzerResult<()> {
+    fn apply_delete_many(lines: &mut Vec<String>, start_line: usize, end_line: usize) -> AicedResult<()> {
         if start_line == 0 || end_line > lines.len() || start_line > end_line {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "line_range",
                 start_line.to_string().as_str(),
                 "Invalid Range",
@@ -704,7 +704,7 @@ impl FileModifier {
         Ok(())
     }
 
-    fn apply_single_change(lines: &mut Vec<String>, change: &LineChange) -> AilyzerResult<i32> {
+    fn apply_single_change(lines: &mut Vec<String>, change: &LineChange) -> AicedResult<i32> {
         match change {
             LineChange::Replace { line_number, old_content, new_content } => {
                 if new_content.contains('\n') {
@@ -767,9 +767,9 @@ impl FileModifier {
         }
     }
 
-    fn apply_replace_range(lines: &mut Vec<String>, start_line: usize, end_line: usize, _old_content: &[String], new_content: &[String]) -> AilyzerResult<()> {
+    fn apply_replace_range(lines: &mut Vec<String>, start_line: usize, end_line: usize, _old_content: &[String], new_content: &[String]) -> AicedResult<()> {
         if start_line == 0 || end_line > lines.len() || start_line > end_line {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "replace_range",
                 start_line.to_string().as_str(),
                 "Line Wrong",
@@ -791,7 +791,7 @@ impl FileModifier {
         Ok(())
     }
 
-    fn create_file(repo_path: &str, file_path: &str, content: &str) -> AilyzerResult<()> {
+    fn create_file(repo_path: &str, file_path: &str, content: &str) -> AicedResult<()> {
         let full_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let path = Path::new(&full_path);
 
@@ -803,14 +803,14 @@ impl FileModifier {
         Ok(())
     }
 
-    fn delete_file(repo_path: &str, file_path: &str) -> AilyzerResult<()> {
+    fn delete_file(repo_path: &str, file_path: &str) -> AicedResult<()> {
         let full_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let path = Path::new(&full_path);
 
         if path.exists() {
             fs::remove_file(path)?;
         } else {
-            return Err(AilyzerError::validation_error(
+            return Err(AicedError::validation_error(
                 "file_exists",
                 &full_path,
                 "Line Wrong",
@@ -821,7 +821,7 @@ impl FileModifier {
         Ok(())
     }
 
-    pub fn apply_changes_grouped_by_file(repository_config: Arc<RepositoryConfig>, file_changes: Vec<&FileChange>) -> AilyzerResult<usize> {
+    pub fn apply_changes_grouped_by_file(repository_config: Arc<RepositoryConfig>, file_changes: Vec<&FileChange>) -> AicedResult<usize> {
         let mut applied_count = 0;
 
         let mut file_groups: HashMap<String, Vec<&FileChange>> = HashMap::new();
@@ -846,12 +846,12 @@ impl FileModifier {
         Ok(applied_count)
     }
 
-    pub fn apply_file_modifications_with_smart_validation(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AilyzerResult<()> {
+    pub fn apply_file_modifications_with_smart_validation(repo_path: &str, file_path: &str, changes: Rc<Vec<&LineChange>>) -> AicedResult<()> {
         let str_path = format!("{}/{}", repo_path, file_path).replace("//", "/");
         let full_path = Path::new(&*str_path);
 
         if !full_path.exists() {
-            return Err(AilyzerError::file_error(
+            return Err(AicedError::file_error(
                 full_path.to_str().unwrap(),
                 "not_found",
                 &format!("File does not exist: {}", full_path.display())
@@ -890,7 +890,7 @@ impl FileModifier {
                             log::error!("❌ Both exact and smart validation failed");
                             log::error!("   Exact error: {}", exact_error);
                             log::error!("   Smart error: {}", smart_error);
-                            return Err(AilyzerError::validation_error(
+                            return Err(AicedError::validation_error(
                                 "line_number",
                                 "0",
                                 "Line Wrong",
@@ -911,11 +911,11 @@ impl FileModifier {
         Ok(())
     }
 
-    fn validate_single_change_against_current_state(change: &LineChange, current_lines: &[String]) -> AilyzerResult<()> {
+    fn validate_single_change_against_current_state(change: &LineChange, current_lines: &[String]) -> AicedResult<()> {
         match change {
             LineChange::Replace { line_number, old_content, .. } => {
                 if *line_number == 0 || *line_number > current_lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &line_number.to_string(),
                         "Line Wrong",
@@ -925,7 +925,7 @@ impl FileModifier {
 
                 let actual_content = &current_lines[*line_number - 1];
                 if actual_content.trim() != old_content.trim() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &line_number.to_string(),
                         "Line Wrong",
@@ -936,7 +936,7 @@ impl FileModifier {
             }
             LineChange::ReplaceRange { start_line, end_line, old_content, .. } => {
                 if *start_line == 0 || *end_line > current_lines.len() || start_line > end_line {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &start_line.to_string(),
                         "Line Wrong",
@@ -947,7 +947,7 @@ impl FileModifier {
                 for (i, expected_line) in old_content.iter().enumerate() {
                     let line_index = start_line - 1 + i;
                     if line_index >= current_lines.len() {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             &(line_index + 1).to_string(),
                             "Line Wrong",
@@ -957,7 +957,7 @@ impl FileModifier {
 
                     let actual_line = &current_lines[line_index];
                     if actual_line.trim() != expected_line.trim() {
-                        return Err(AilyzerError::validation_error(
+                        return Err(AicedError::validation_error(
                             "line_number",
                             &(line_index + 1).to_string(),
                             "Line Wrong",
@@ -969,7 +969,7 @@ impl FileModifier {
             }
             LineChange::Delete { line_number } => {
                 if *line_number == 0 || *line_number > current_lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &line_number.to_string(),
                         "Line Wrong",
@@ -979,7 +979,7 @@ impl FileModifier {
             }
             LineChange::DeleteMany { start_line, end_line } => {
                 if *start_line == 0 || *end_line > current_lines.len() || start_line > end_line {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &start_line.to_string(),
                         "Line Wrong",
@@ -992,7 +992,7 @@ impl FileModifier {
             LineChange::InsertManyAfter { line_number, .. } |
             LineChange::InsertManyBefore { line_number, .. } => {
                 if *line_number > current_lines.len() {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "line_number",
                         &line_number.to_string(),
                         "Line Wrong",
@@ -1016,7 +1016,7 @@ impl FileModifier {
         cumulative_offset
     }
 
-    fn apply_changes_to_single_file(repository_config: Arc<RepositoryConfig>, file_path: &str, changes: &[&FileChange]) -> AilyzerResult<usize> {
+    fn apply_changes_to_single_file(repository_config: Arc<RepositoryConfig>, file_path: &str, changes: &[&FileChange]) -> AicedResult<usize> {
         let mut applied_count = 0;
 
         let mut modify_changes = Vec::new();
@@ -1058,7 +1058,7 @@ impl FileModifier {
         Ok(applied_count)
     }
 
-    fn smart_validate_and_adjust_change(change: &LineChange, current_lines: &[String]) -> AilyzerResult<LineChange> {
+    fn smart_validate_and_adjust_change(change: &LineChange, current_lines: &[String]) -> AicedResult<LineChange> {
         match change {
             LineChange::Replace { line_number, old_content, new_content } => {
                 for offset in 0..10 {
@@ -1079,7 +1079,7 @@ impl FileModifier {
                     }
                 }
 
-                Err(AilyzerError::validation_error(
+                Err(AicedError::validation_error(
                     "smart_validation",
                     "0",
                     "ContentNotFound",
@@ -1092,7 +1092,7 @@ impl FileModifier {
 
                 // Validate that old_content matches the expected range size
                 if old_content.len() != original_range_size {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "smart_validation",
                         "0",
                         "RangeMismatch",
@@ -1136,7 +1136,7 @@ impl FileModifier {
                     }
                 }
 
-                Err(AilyzerError::validation_error(
+                Err(AicedError::validation_error(
                     "smart_validation",
                     "0",
                     "ContentNotFound",
@@ -1160,7 +1160,7 @@ impl FileModifier {
                         }
                     }
 
-                    Err(AilyzerError::validation_error(
+                    Err(AicedError::validation_error(
                         "smart_validation",
                         "0",
                         "LineNotFound",
@@ -1184,7 +1184,7 @@ impl FileModifier {
                             end_line: adjusted_end,
                         })
                     } else {
-                        Err(AilyzerError::validation_error(
+                        Err(AicedError::validation_error(
                             "smart_validation",
                             "0",
                             "InvalidRange",

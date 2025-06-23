@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::errors::{AicedError, AicedResult};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "action")]
@@ -158,64 +158,64 @@ impl LineChange {
         }
     }
 
-    pub fn validate(&self) -> AilyzerResult<()> {
+    pub fn validate(&self) -> AicedResult<()> {
         match self {
             LineChange::Replace { line_number, old_content, new_content } => {
                 if *line_number == 0 {
-                    return Err(AilyzerError::system_error("validate line", "Line number cannot be 0"));
+                    return Err(AicedError::system_error("validate line", "Line number cannot be 0"));
                 }
                 if old_content.is_empty() {
-                    return Err(AilyzerError::system_error("validate line", "Old content cannot be empty for replace operation"));
+                    return Err(AicedError::system_error("validate line", "Old content cannot be empty for replace operation"));
                 }
                 if new_content.is_empty() {
-                    return Err(AilyzerError::system_error("validate line", "New content cannot be empty for replace operation"));
+                    return Err(AicedError::system_error("validate line", "New content cannot be empty for replace operation"));
                 }
             }
             LineChange::InsertAfter { line_number, new_content } |
             LineChange::InsertBefore { line_number, new_content } => {
                 if *line_number == 0 && matches!(self, LineChange::InsertBefore { .. }) {
-                    return Err(AilyzerError::system_error("validate line", "Line number cannot be 0 for insert_before operation"));
+                    return Err(AicedError::system_error("validate line", "Line number cannot be 0 for insert_before operation"));
                 }
                 if new_content.is_empty() {
-                    return Err(AilyzerError::system_error("validate line", "New content cannot be empty for insert operation"));
+                    return Err(AicedError::system_error("validate line", "New content cannot be empty for insert operation"));
                 }
             }
             LineChange::Delete { line_number } => {
                 if *line_number == 0 {
-                    return Err(AilyzerError::system_error("validate line", "Line number cannot be 0"));
+                    return Err(AicedError::system_error("validate line", "Line number cannot be 0"));
                 }
             }
             LineChange::ReplaceRange { start_line, end_line, old_content, new_content: _ } => {
                 if *start_line == 0 {
-                    return Err(AilyzerError::system_error("validate line", "Start line cannot be 0"));
+                    return Err(AicedError::system_error("validate line", "Start line cannot be 0"));
                 }
                 if start_line > end_line {
-                    return Err(AilyzerError::system_error("validate line", "Start line cannot be greater than end line"));
+                    return Err(AicedError::system_error("validate line", "Start line cannot be greater than end line"));
                 }
                 if old_content.is_empty() {
-                    return Err(AilyzerError::system_error("validate line", "Old content cannot be empty for replace_range operation"));
+                    return Err(AicedError::system_error("validate line", "Old content cannot be empty for replace_range operation"));
                 }
             }
             LineChange::InsertManyAfter { line_number, new_lines } |
             LineChange::InsertManyBefore { line_number, new_lines } => {
                 if *line_number == 0 && matches!(self, LineChange::InsertManyBefore { .. }) {
-                    return Err(AilyzerError::system_error("validate line", "Line number cannot be 0 for insert_many_before operation"));
+                    return Err(AicedError::system_error("validate line", "Line number cannot be 0 for insert_many_before operation"));
                 }
                 if new_lines.is_empty() {
-                    return Err(AilyzerError::system_error("validate line", "New lines cannot be empty for multi-line insert operation"));
+                    return Err(AicedError::system_error("validate line", "New lines cannot be empty for multi-line insert operation"));
                 }
                 for (i, line) in new_lines.iter().enumerate() {
                     if line.trim().is_empty() {
-                        return Err(AilyzerError::system_error("validate line", &format!("Line {} in new_lines is empty or whitespace-only", i + 1)));
+                        return Err(AicedError::system_error("validate line", &format!("Line {} in new_lines is empty or whitespace-only", i + 1)));
                     }
                 }
             }
             LineChange::DeleteMany { start_line, end_line } => {
                 if *start_line == 0 {
-                    return Err(AilyzerError::system_error("validate line", "Start line cannot be 0"));
+                    return Err(AicedError::system_error("validate line", "Start line cannot be 0"));
                 }
                 if start_line > end_line {
-                    return Err(AilyzerError::system_error("validate line", "Start line cannot be greater than end line"));
+                    return Err(AicedError::system_error("validate line", "Start line cannot be greater than end line"));
                 }
             }
         }

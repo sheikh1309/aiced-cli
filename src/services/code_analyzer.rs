@@ -1,8 +1,8 @@
 use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
-use crate::adapters::ailyzer_adapter::AiLyzerAdapter;
-use crate::errors::AilyzerResult;
+use crate::adapters::aiced_adapter::AicedAdapter;
+use crate::errors::AicedResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::analysis_parser::AnalysisParser;
@@ -16,17 +16,17 @@ use crate::structs::config::repository_config::RepositoryConfig;
 pub struct CodeAnalyzer {
     repo_scanner: RepoScanner,
     repository_config: Arc<RepositoryConfig>,
-    adapter: Arc<AiLyzerAdapter>,
+    adapter: Arc<AicedAdapter>,
 }
 
 impl CodeAnalyzer {
 
     pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
-        let adapter = Arc::new(AiLyzerAdapter::new("http://localhost:3000".to_string(), "api-key-123456".to_string()));
+        let adapter = Arc::new(AicedAdapter::new("http://localhost:3000".to_string(), "api-key-123456".to_string()));
         Self { repo_scanner: RepoScanner::new(Arc::clone(&repository_config), Arc::clone(&adapter)), repository_config, adapter }
     }
 
-    pub async fn analyze_repository(&self) -> AilyzerResult<Rc<AnalyzeRepositoryResponse>> {
+    pub async fn analyze_repository(&self) -> AicedResult<Rc<AnalyzeRepositoryResponse>> {
         let files = self.repo_scanner.scan_files().await?;
         let user_prompt = prompt_generator::generate_analysis_user_prompt(files, &self.repository_config.path);
         let mut logger = AnimatedLogger::new("Analyzing Repository".to_string());

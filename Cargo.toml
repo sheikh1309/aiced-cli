@@ -1,8 +1,8 @@
 [package]
-name = "ailyzer-cli"
+name = "aiced-cli"
 version = "0.2.0"
 edition = "2021"
-authors = ["Ailyzer Team"]
+authors = ["Aiced Team"]
 description = "AI-powered code analysis tool with enhanced parsing and change management"
 license = "MIT"
 repository = "https://github.com/sheikh1309/ailyzer-cli"
@@ -114,7 +114,7 @@ codegen-units = 1
 
 # Binary configuration
 [[bin]]
-name = "ailyzer-cli"
+name = "aiced-cli"
 path = "src/main.rs"
 
 # Test configuration

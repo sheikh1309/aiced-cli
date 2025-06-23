@@ -10,7 +10,7 @@ use serde_json::json;
 use crate::ui::session_manager::{SessionManager, SessionStatus};
 use crate::enums::file_change::FileChange;
 use crate::structs::config::repository_config::RepositoryConfig;
-use crate::errors::{AilyzerResult, AilyzerError};
+use crate::errors::{AicedResult, AicedError};
 
 pub struct DiffServer {
     session_manager: Arc<SessionManager>,
@@ -27,7 +27,7 @@ impl DiffServer {
         }
     }
 
-    pub async fn start(&mut self) -> AilyzerResult<u16> {
+    pub async fn start(&mut self) -> AicedResult<u16> {
         // Find an available port
         let port = self.find_available_port().await?;
         self.port = Some(port);
@@ -74,11 +74,11 @@ impl DiffServer {
         &self,
         repository_config: &RepositoryConfig,
         changes: Vec<FileChange>,
-    ) -> AilyzerResult<String> {
+    ) -> AicedResult<String> {
         self.session_manager.create_session(repository_config, &changes)
     }
 
-    pub async fn wait_for_completion(&self, session_id: &str, timeout_minutes: u64) -> AilyzerResult<Vec<String>> {
+    pub async fn wait_for_completion(&self, session_id: &str, timeout_minutes: u64) -> AicedResult<Vec<String>> {
         let timeout_duration = Duration::from_secs(timeout_minutes * 60);
 
         let result = timeout(timeout_duration, async {
@@ -96,7 +96,7 @@ impl DiffServer {
                         }
                     }
                 } else {
-                    return Err(AilyzerError::validation_error(
+                    return Err(AicedError::validation_error(
                         "Session not found",
                         "Session not found",
                         "Session not found",
@@ -115,7 +115,7 @@ impl DiffServer {
         }
     }
 
-    pub async fn shutdown(&mut self) -> AilyzerResult<()> {
+    pub async fn shutdown(&mut self) -> AicedResult<()> {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(());
         }
@@ -167,14 +167,14 @@ impl DiffServer {
             .or(cancel_session)
     }
 
-    async fn find_available_port(&self) -> AilyzerResult<u16> {
+    async fn find_available_port(&self) -> AicedResult<u16> {
         for port in 8080..8200 {
             if let Ok(listener) = tokio::net::TcpListener::bind(format!("127.0.0.1:{}", port)).await {
                 drop(listener);
                 return Ok(port);
             }
         }
-        Err(AilyzerError::validation_error(
+        Err(AicedError::validation_error(
             "No available ports found",
             "No available ports found",
             "No available ports found",

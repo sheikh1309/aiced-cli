@@ -1,16 +1,16 @@
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::errors::{AicedError, AicedResult};
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::structs::api_response::ApiResponse;
 
-pub struct AiLyzerAdapter {
+pub struct AicedAdapter {
     client: Client,
     base_url: String,
     api_key: String,
 }
 
-impl AiLyzerAdapter {
+impl AicedAdapter {
 
     pub fn new(base_url: String, api_key: String) -> Self {
         Self {
@@ -26,7 +26,7 @@ impl AiLyzerAdapter {
         request_body: &T,
         logger: &mut AnimatedLogger,
         operation_name: &str,
-    ) -> AilyzerResult<ApiResponse<R>>  where T: Serialize, R: for<'de> Deserialize<'de>{
+    ) -> AicedResult<ApiResponse<R>>  where T: Serialize, R: for<'de> Deserialize<'de>{
         let url = format!("{}/{}", self.base_url.trim_end_matches('/'), endpoint.trim_start_matches('/'));
 
         let response = match self.client
@@ -41,7 +41,7 @@ impl AiLyzerAdapter {
             Err(e) => {
                 logger.stop(&format!("{} failed", operation_name)).await;
                 log::error!("Network error during {} request: {}", operation_name, e);
-                return Err(AilyzerError::system_error(
+                return Err(AicedError::system_error(
                     "analysis Error",
                     &format!("Failed to connect to {} server", operation_name)
                 ).into());
@@ -55,7 +55,7 @@ impl AiLyzerAdapter {
                     Err(e) => {
                         logger.stop(&format!("{} failed", operation_name)).await;
                         log::error!("Failed to parse JSON response for {}: {}", operation_name, e);
-                        return Err(AilyzerError::system_error(
+                        return Err(AicedError::system_error(
                             "analysis Error",
                             &format!("Invalid response format from {} server", operation_name)
                         ).into());
@@ -65,7 +65,7 @@ impl AiLyzerAdapter {
             StatusCode::REQUEST_TIMEOUT => {
                 logger.stop(&format!("{} failed", operation_name)).await;
                 log::error!("{} request timed out (408)", operation_name);
-                return Err(AilyzerError::system_error(
+                return Err(AicedError::system_error(
                     "analysis Error",
                     &format!("{} request timed out (408)", operation_name)
                 ).into());
@@ -74,7 +74,7 @@ impl AiLyzerAdapter {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                 logger.stop(&format!("{} failed", operation_name)).await;
                 log::error!("{} request failed with status {}: {}", operation_name, status, error_text);
-                return Err(AilyzerError::system_error(
+                return Err(AicedError::system_error(
                     "analysis Error",
                     &format!("{} request failed with status {}: {}", operation_name, status, error_text)
                 ).into());
@@ -84,7 +84,7 @@ impl AiLyzerAdapter {
         if !body.success {
             logger.stop(&format!("{} failed", operation_name)).await;
             log::error!("API returned error for {}: {}", operation_name, body.message);
-            return Err(AilyzerError::system_error(
+            return Err(AicedError::system_error(
                 "analysis Error",
                 &format!("{} failed: {}", operation_name, body.message)
             ).into());
@@ -99,7 +99,7 @@ impl AiLyzerAdapter {
         request_body: &T,
         logger: &mut AnimatedLogger,
         operation_name: &str,
-    ) -> AilyzerResult<R>  where T: Serialize, R: for<'de> Deserialize<'de> {
+    ) -> AicedResult<R>  where T: Serialize, R: for<'de> Deserialize<'de> {
         let response = self.post_json(endpoint, request_body, logger, operation_name).await?;
 
         match response.data {
@@ -107,7 +107,7 @@ impl AiLyzerAdapter {
             None => {
                 logger.stop(&format!("{} failed", operation_name)).await;
                 log::error!("API response missing data field for {}", operation_name);
-                Err(AilyzerError::system_error(
+                Err(AicedError::system_error(
                     "analysis Error",
                     &format!("API response missing data field for {}", operation_name)
                 ).into())

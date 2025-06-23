@@ -1,1 +1,1 @@
-pub mod ailyzer_adapter;
+pub mod aiced_adapter;

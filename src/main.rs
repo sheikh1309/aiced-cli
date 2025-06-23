@@ -1,8 +1,8 @@
-//! Ailyzer - AI-powered code analysis tool
+//! Aiced - AI-powered code analysis tool
 
 use clap::Parser;
 use std::process;
-use crate::errors::{AilyzerResult, ErrorHandler, ErrorSeverity};
+use crate::errors::{AicedResult, ErrorHandler, ErrorSeverity};
 use crate::structs::cli::Cli;
 use crate::workers::command_runner::CommandRunner;
 
@@ -39,8 +39,8 @@ async fn main() {
     }
 }
 
-async fn run() -> AilyzerResult<()> {
-    log::info!("Starting ailyzer...");
+async fn run() -> AicedResult<()> {
+    log::info!("Starting aiced...");
 
     let cli = Cli::parse();
     let mut command_runner = CommandRunner::new();

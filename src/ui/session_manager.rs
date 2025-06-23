@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
 use crate::structs::config::repository_config::RepositoryConfig;
-use crate::errors::AilyzerResult;
+use crate::errors::AicedResult;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffSession {
@@ -60,7 +60,7 @@ impl SessionManager {
         &self,
         repository_config: &RepositoryConfig,
         changes: &[FileChange],
-    ) -> AilyzerResult<String> {
+    ) -> AicedResult<String> {
         let session_id = Uuid::new_v4().to_string();
 
         let mut files = Vec::new();
@@ -108,7 +108,7 @@ impl SessionManager {
         self.sessions.get(session_id).map(|entry| entry.clone())
     }
 
-    pub fn apply_change(&self, session_id: &str, change_id: &str) -> AilyzerResult<bool> {
+    pub fn apply_change(&self, session_id: &str, change_id: &str) -> AicedResult<bool> {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.applied_changes.insert(change_id.to_string());
 
@@ -125,7 +125,7 @@ impl SessionManager {
         Ok(false)
     }
 
-    pub fn unapply_change(&self, session_id: &str, change_id: &str) -> AilyzerResult<bool> {
+    pub fn unapply_change(&self, session_id: &str, change_id: &str) -> AicedResult<bool> {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.applied_changes.remove(change_id);
 
@@ -142,7 +142,7 @@ impl SessionManager {
         Ok(false)
     }
 
-    pub fn complete_session(&self, session_id: &str) -> AilyzerResult<Vec<String>> {
+    pub fn complete_session(&self, session_id: &str) -> AicedResult<Vec<String>> {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.status = SessionStatus::Completed;
             Ok(session.applied_changes.iter().cloned().collect())
@@ -151,7 +151,7 @@ impl SessionManager {
         }
     }
 
-    pub fn cancel_session(&self, session_id: &str) -> AilyzerResult<()> {
+    pub fn cancel_session(&self, session_id: &str) -> AicedResult<()> {
         if let Some(mut session) = self.sessions.get_mut(session_id) {
             session.status = SessionStatus::Cancelled;
         }
@@ -164,7 +164,7 @@ impl SessionManager {
         file_path: &str,
         reason: &str,
         line_changes: &[LineChange],
-    ) -> AilyzerResult<FileDiff> {
+    ) -> AicedResult<FileDiff> {
         let full_path = format!("{}/{}", repository_config.path, file_path).replace("//", "/");
         let original_content = std::fs::read_to_string(&full_path)?;
 
@@ -193,7 +193,7 @@ impl SessionManager {
         file_path: &str,
         reason: &str,
         content: &str,
-    ) -> AilyzerResult<FileDiff> {
+    ) -> AicedResult<FileDiff> {
         let change_item = ChangeItem {
             id: Uuid::new_v4().to_string(),
             change_type: "create_file".to_string(),
@@ -220,7 +220,7 @@ impl SessionManager {
         repository_config: &RepositoryConfig,
         file_path: &str,
         reason: &str,
-    ) -> AilyzerResult<FileDiff> {
+    ) -> AicedResult<FileDiff> {
         let full_path = format!("{}/{}", repository_config.path, file_path).replace("//", "/");
         let original_content = std::fs::read_to_string(&full_path).unwrap_or_default();
 
@@ -249,7 +249,7 @@ impl SessionManager {
         &self,
         line_change: &LineChange,
         reason: &str,
-    ) -> AilyzerResult<ChangeItem> {
+    ) -> AicedResult<ChangeItem> {
         let (change_type, line_number, old_content, new_content) = match line_change {
             LineChange::Replace { line_number, old_content, new_content } => {
                 ("replace".to_string(), *line_number, Some(old_content.clone()), Some(new_content.clone()))
@@ -292,7 +292,7 @@ impl SessionManager {
         &self,
         original_content: &str,
         line_changes: &[LineChange],
-    ) -> AilyzerResult<String> {
+    ) -> AicedResult<String> {
         let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
 
         // Sort changes by line number in reverse order to avoid index shifting issues

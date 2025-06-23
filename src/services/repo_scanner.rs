@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::fs;
 use futures::{stream, StreamExt};
-use crate::adapters::ailyzer_adapter::AiLyzerAdapter;
-use crate::errors::AilyzerResult;
+use crate::adapters::aiced_adapter::AicedAdapter;
+use crate::errors::AicedResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::structs::analyze_request::AnalyzeRequest;
@@ -17,11 +17,11 @@ use crate::structs::files_cache::FilesCache;
 pub struct RepoScanner {
     repository_config: Arc<RepositoryConfig>,
     max_concurrent_reads: usize,
-    adapter: Arc<AiLyzerAdapter>
+    adapter: Arc<AicedAdapter>
 }
 
 impl RepoScanner {
-    pub fn new(repository_config: Arc<RepositoryConfig>, adapter: Arc<AiLyzerAdapter>) -> Self {
+    pub fn new(repository_config: Arc<RepositoryConfig>, adapter: Arc<AicedAdapter>) -> Self {
         Self { repository_config, max_concurrent_reads: 10, adapter  }
     }
 
@@ -40,7 +40,7 @@ impl RepoScanner {
         image_extensions.into_iter().map(String::from).collect()
     }
 
-    pub async fn scan_files(&self) -> AilyzerResult<Vec<FileInfo>> {
+    pub async fn scan_files(&self) -> AicedResult<Vec<FileInfo>> {
         let patterns = self.load_gitignore(&self.repository_config.path).await?;
         let repo_files_paths = self.collect_file_paths(Path::new(&self.repository_config.path), &patterns).await?;
 
@@ -52,13 +52,13 @@ impl RepoScanner {
     }
 
     fn get_cache_file_path(&self) -> PathBuf {
-        let cache_name = format!("ailyzer/{}.toml", self.repository_config.name);
+        let cache_name = format!("aiced/{}.toml", self.repository_config.name);
         dirs::home_dir()
             .map(|d| d.join(cache_name))
             .unwrap_or_default()
     }
 
-    async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
+    async fn get_filtered_files(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AicedResult<Vec<PathBuf>> {
         if let Some(cache) = FilesCache::load_from_file(cache_path)? {
             if cache.is_valid_for(&repo_files_paths) {
                 return Ok(cache.to_path_bufs());
@@ -68,7 +68,7 @@ impl RepoScanner {
         self.run_ai_filtering_and_cache(repo_files_paths, cache_path).await
     }
 
-    async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AilyzerResult<Vec<PathBuf>> {
+    async fn run_ai_filtering_and_cache(&self, repo_files_paths: Vec<PathBuf>, cache_path: &Path) -> AicedResult<Vec<PathBuf>> {
         let filtered_paths = self.filter_files(repo_files_paths.clone()).await?;
 
         let cache = FilesCache::from_data(&filtered_paths, &repo_files_paths);
@@ -77,7 +77,7 @@ impl RepoScanner {
         Ok(filtered_paths)
     }
 
-    async fn process_files(&self, file_paths: Vec<PathBuf>) -> AilyzerResult<Vec<FileInfo>> {
+    async fn process_files(&self, file_paths: Vec<PathBuf>) -> AicedResult<Vec<FileInfo>> {
         let files: Vec<FileInfo> = stream::iter(file_paths)
             .map(|path| async move {
                 match fs::read_to_string(&path).await {
@@ -104,7 +104,7 @@ impl RepoScanner {
         Ok(files)
     }
 
-    async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> AilyzerResult<Vec<PathBuf>> {
+    async fn filter_files(&self, repo_files_paths: Vec<PathBuf>) -> AicedResult<Vec<PathBuf>> {
         let user_prompt = prompt_generator::generate_file_filter_user_prompt(&repo_files_paths, &self.repository_config.path);
 
         let mut logger = AnimatedLogger::new("File Filtering".to_string());
@@ -135,7 +135,7 @@ impl RepoScanner {
         Ok(filtered_files_paths)
     }
 
-    async fn load_gitignore(&self, repo_path: &str) -> AilyzerResult<HashSet<String>> {
+    async fn load_gitignore(&self, repo_path: &str) -> AicedResult<HashSet<String>> {
         let gitignore_path = format!("{}/.gitignore", repo_path);
         let mut patterns = self.get_default_image_patterns();
         patterns.insert(String::from(".git/"));
@@ -153,7 +153,7 @@ impl RepoScanner {
         Ok(patterns)
     }
 
-    async fn collect_file_paths(&self, dir: &Path, patterns: &HashSet<String>) -> AilyzerResult<Vec<PathBuf>> {
+    async fn collect_file_paths(&self, dir: &Path, patterns: &HashSet<String>) -> AicedResult<Vec<PathBuf>> {
         let mut paths = Vec::new();
         let mut dirs_to_process = vec![dir.to_path_buf()];
 

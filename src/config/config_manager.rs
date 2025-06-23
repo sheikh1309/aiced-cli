@@ -1,15 +1,15 @@
 use std::path::Path;
 use std::fs;
 use std::rc::Rc;
-use crate::errors::{AilyzerError, AilyzerResult};
+use crate::errors::{AicedError, AicedResult};
 use crate::structs::config::config::Config;
 
 pub struct ConfigManager;
 
 impl ConfigManager {
 
-    pub fn load() -> AilyzerResult<Rc<Config>> {
-        let config_locations = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
+    pub fn load() -> AicedResult<Rc<Config>> {
+        let config_locations = dirs::home_dir().map(|d| d.join("aiced/config.toml")).unwrap_or_default();
 
         if config_locations.exists() {
             log::info!("📋 Loading config from: {}", config_locations.display());
@@ -21,8 +21,8 @@ impl ConfigManager {
         Ok(Rc::new(Config::default()))
     }
 
-    pub fn create_sample_multi_repo_config() -> AilyzerResult<()> {
-        let sample_config = r#"# AiLyzer Multi-Repository Configuration
+    pub fn create_sample_multi_repo_config() -> AicedResult<()> {
+        let sample_config = r#"# Aiced Multi-Repository Configuration
 
 [global]
 # How often to scan repositories: "hourly", "daily", "weekly", "manual"
@@ -46,7 +46,7 @@ auto_pr = true
 # Output Configuration
 [output]
 # Directory to store all analysis results
-output_dir = "./ailyzer-results"
+output_dir = "./aiced-results"
 
 # Summary dashboard
 generate_dashboard = true
@@ -57,14 +57,14 @@ dashboard_port = 8080
 on_critical_only = false
 summary_report = true
 "#;
-        let config_file_dir_path = dirs::home_dir().map(|d| d.join("ailyzer")).unwrap_or_default();
-        let config_file_path = dirs::home_dir().map(|d| d.join("ailyzer/config.toml")).unwrap_or_default();
+        let config_file_dir_path = dirs::home_dir().map(|d| d.join("aiced")).unwrap_or_default();
+        let config_file_path = dirs::home_dir().map(|d| d.join("aiced/config.toml")).unwrap_or_default();
         fs::create_dir(&config_file_dir_path)?;
         fs::write(&config_file_path, sample_config)?;
         Ok(())
     }
 
-    pub fn validate_config(config: Rc<Config>) -> AilyzerResult<()>  {
+    pub fn validate_config(config: Rc<Config>) -> AicedResult<()>  {
         let mut errors = Vec::new();
 
         for repo in &config.repositories {
@@ -84,7 +84,7 @@ summary_report = true
         if errors.is_empty() {
             Ok(())
         } else {
-            Err(AilyzerError::config_error("Config Error", Some(""), Some("")))
+            Err(AicedError::config_error("Config Error", Some(""), Some("")))
         }
     }
     

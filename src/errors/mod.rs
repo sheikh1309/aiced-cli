@@ -3,7 +3,7 @@ use std::error::Error as StdError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AilyzerError {
+pub enum AicedError {
     // Configuration errors
     ConfigurationError {
         message: String,
@@ -86,12 +86,12 @@ pub enum AilyzerError {
 
     // Multiple errors (for batch operations)
     MultipleErrors {
-        errors: Vec<AilyzerError>,
+        errors: Vec<AicedError>,
         context: String,
     },
 }
 
-impl AilyzerError {
+impl AicedError {
     pub fn config_error(message: &str, field: Option<&str>, suggestion: Option<&str>) -> Self {
         Self::ConfigurationError {
             message: message.to_string(),
@@ -275,13 +275,13 @@ impl AilyzerError {
     }
 }
 
-impl fmt::Display for AilyzerError {
+impl fmt::Display for AicedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.user_message())
     }
 }
 
-impl StdError for AilyzerError {}
+impl StdError for AicedError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ErrorSeverity {
@@ -311,12 +311,12 @@ impl ErrorSeverity {
     }
 }
 
-pub type AilyzerResult<T> = Result<T, AilyzerError>;
+pub type AicedResult<T> = Result<T, AicedError>;
 
 pub struct ErrorHandler;
 
 impl ErrorHandler {
-    pub fn handle_error(error: &AilyzerError) {
+    pub fn handle_error(error: &AicedError) {
         let severity = error.severity();
 
         // Log technical details
@@ -349,18 +349,18 @@ impl ErrorHandler {
 }
 
 
-impl From<std::io::Error> for AilyzerError {
+impl From<std::io::Error> for AicedError {
     fn from(error: std::io::Error) -> Self {
-        AilyzerError::SystemError {
+        AicedError::SystemError {
             operation: "I/O operation".to_string(),
             reason: error.to_string(),
         }
     }
 }
 
-impl From<serde_json::Error> for AilyzerError {
+impl From<serde_json::Error> for AicedError {
     fn from(error: serde_json::Error) -> Self {
-        AilyzerError::ParseError {
+        AicedError::ParseError {
             content_type: "JSON".to_string(),
             line_number: Some(error.line()),
             reason: error.to_string(),
@@ -369,9 +369,9 @@ impl From<serde_json::Error> for AilyzerError {
     }
 }
 
-impl From<toml::de::Error> for AilyzerError {
+impl From<toml::de::Error> for AicedError {
     fn from(error: toml::de::Error) -> Self {
-        AilyzerError::ParseError {
+        AicedError::ParseError {
             content_type: "TOML".to_string(),
             line_number: None,
             reason: error.message().to_string(),
@@ -380,9 +380,9 @@ impl From<toml::de::Error> for AilyzerError {
     }
 }
 
-impl From<reqwest::Error> for AilyzerError {
+impl From<reqwest::Error> for AicedError {
     fn from(error: reqwest::Error) -> Self {
-        AilyzerError::NetworkError {
+        AicedError::NetworkError {
             operation: "HTTP request".to_string(),
             url: error.url().map(|u| u.to_string()),
             status_code: error.status().map(|s| s.as_u16()),
