@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -28,53 +29,47 @@ impl DiffServer {
     }
 
     pub async fn start(&mut self) -> AicedResult<u16> {
-        // Find an available port
         let port = self.find_available_port().await?;
         self.port = Some(port);
 
         let session_manager = Arc::clone(&self.session_manager);
 
-        // Create shutdown channel
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         self.shutdown_tx = Some(shutdown_tx);
 
-        // Static files route
+        // Static files route (for /static/* paths)
         let static_files = warp::path("static")
             .and(warp::fs::dir("src/ui/static"));
 
-        // Main diff viewer route
-        let diff_route = warp::path("diff")
+        // Assets route (for /assets/* paths) - ADD THIS
+        let assets_route = warp::path("assets")
+            .and(warp::fs::dir("src/ui/static/assets"));
+
+        let diff_route = warp::path::end()  // Matches the root path "/"
             .and(warp::query::<HashMap<String, String>>())
             .and_then(serve_diff_page);
 
-        // API routes
         let api_routes = self.create_api_routes(Arc::clone(&session_manager));
 
-        // Combine all routes
         let routes = static_files
+            .or(assets_route)  // ADD THIS LINE
             .or(diff_route)
             .or(api_routes)
             .with(warp::cors().allow_any_origin());
 
-        // Start server
         let addr: SocketAddr = ([127, 0, 0, 1], port).into();
         let (_, server) = warp::serve(routes)
             .bind_with_graceful_shutdown(addr, async {
                 shutdown_rx.await.ok();
             });
 
-        // Spawn server task
         tokio::spawn(server);
 
         log::info!("🌐 Diff server started on port {}", port);
         Ok(port)
     }
 
-    pub async fn create_session(
-        &self,
-        repository_config: &RepositoryConfig,
-        changes: Vec<FileChange>,
-    ) -> AicedResult<String> {
+    pub async fn create_session(&self, repository_config: &RepositoryConfig, changes: Vec<FileChange>) -> AicedResult<String> {
         self.session_manager.create_session(repository_config, &changes)
     }
 
@@ -183,10 +178,7 @@ impl DiffServer {
     }
 }
 
-// Handler functions
-async fn serve_diff_page(
-    params: HashMap<String, String>,
-) -> Result<impl warp::Reply, Infallible> {
+async fn serve_diff_page(params: HashMap<String, String>) -> Result<impl warp::Reply, Infallible> {
     let session_id = params.get("session").unwrap_or(&"".to_string()).clone();
 
     let html = include_str!("static/index.html")
@@ -195,10 +187,7 @@ async fn serve_diff_page(
     Ok(warp::reply::html(html))
 }
 
-async fn get_session_handler(
-    session_id: String,
-    session_manager: Arc<SessionManager>,
-) -> Result<impl warp::Reply, Infallible> {
+async fn get_session_handler(session_id: String, session_manager: Arc<SessionManager>) -> Result<impl warp::Reply, Infallible> {
     match session_manager.get_session(&session_id) {
         Some(session) => Ok(warp::reply::json(&session)),
         None => Ok(warp::reply::json(&json!({
@@ -281,4 +270,3 @@ async fn cancel_session_handler(
         }))),
     }
 }
-

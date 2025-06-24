@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ pub struct FileDiff {
     pub file_path: String,
     pub changes: Vec<ChangeItem>,
     pub original_content: String,
-    pub preview_content: String,
+    // pub preview_content: String,
     pub file_type: String,
 }
 
@@ -56,39 +56,33 @@ impl SessionManager {
         }
     }
 
-    pub fn create_session(
-        &self,
-        repository_config: &RepositoryConfig,
-        changes: &[FileChange],
-    ) -> AicedResult<String> {
+    pub fn create_session(&self, repository_config: &RepositoryConfig, changes: &[FileChange]) -> AicedResult<String> {
         let session_id = Uuid::new_v4().to_string();
 
-        let mut files = Vec::new();
+        let mut files: Vec<FileDiff> = Vec::new();
 
         for change in changes {
-            match change {
+            let diff = match change {
                 FileChange::ModifyFile { file_path, reason, line_changes, .. } => {
-                    let file_diff = self.create_file_diff(
+                    self.create_file_diff(
                         repository_config,
                         file_path,
                         reason,
                         line_changes,
-                    )?;
-                    files.push(file_diff);
+                    )?
                 }
                 FileChange::CreateFile { file_path, reason, content, .. } => {
-                    let file_diff = self.create_new_file_diff(file_path, reason, content)?;
-                    files.push(file_diff);
+                    self.create_new_file_diff(file_path, reason, content)?
                 }
                 FileChange::DeleteFile { file_path, reason, .. } => {
-                    let file_diff = self.create_delete_file_diff(
+                    self.create_delete_file_diff(
                         repository_config,
                         file_path,
                         reason,
-                    )?;
-                    files.push(file_diff);
+                    )?
                 }
-            }
+            };
+            files.push(diff);
         }
 
         let session = DiffSession {
@@ -175,7 +169,7 @@ impl SessionManager {
             changes.push(change_item);
         }
 
-        let preview_content = self.apply_changes_to_content(&original_content, line_changes)?;
+        // let preview_content = self.apply_changes_to_content(&original_content, line_changes)?;
 
         let file_type = self.detect_file_type(file_path);
 
@@ -183,7 +177,7 @@ impl SessionManager {
             file_path: file_path.to_string(),
             changes,
             original_content,
-            preview_content,
+            // preview_content,
             file_type,
         })
     }
@@ -210,7 +204,7 @@ impl SessionManager {
             file_path: file_path.to_string(),
             changes: vec![change_item],
             original_content: String::new(),
-            preview_content: content.to_string(),
+            // preview_content: content.to_string(),
             file_type,
         })
     }
@@ -240,7 +234,7 @@ impl SessionManager {
             file_path: file_path.to_string(),
             changes: vec![change_item],
             original_content,
-            preview_content: String::new(),
+            // preview_content: String::new(),
             file_type,
         })
     }
@@ -288,69 +282,69 @@ impl SessionManager {
         })
     }
 
-    fn apply_changes_to_content(
-        &self,
-        original_content: &str,
-        line_changes: &[LineChange],
-    ) -> AicedResult<String> {
-        let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
-
-        // Sort changes by line number in reverse order to avoid index shifting issues
-        let mut sorted_changes = line_changes.to_vec();
-        sorted_changes.sort_by(|a, b| {
-            let line_a = match a {
-                LineChange::Replace { line_number, .. } => *line_number,
-                LineChange::InsertAfter { line_number, .. } => *line_number,
-                LineChange::InsertBefore { line_number, .. } => *line_number,
-                LineChange::Delete { line_number } => *line_number,
-                LineChange::ReplaceRange { start_line, .. } => *start_line,
-                LineChange::InsertManyAfter { line_number, .. } => *line_number,
-                LineChange::InsertManyBefore { line_number, .. } => *line_number,
-                LineChange::DeleteMany { start_line, .. } => *start_line,
-            };
-            let line_b = match b {
-                LineChange::Replace { line_number, .. } => *line_number,
-                LineChange::InsertAfter { line_number, .. } => *line_number,
-                LineChange::InsertBefore { line_number, .. } => *line_number,
-                LineChange::Delete { line_number } => *line_number,
-                LineChange::ReplaceRange { start_line, .. } => *start_line,
-                LineChange::InsertManyAfter { line_number, .. } => *line_number,
-                LineChange::InsertManyBefore { line_number, .. } => *line_number,
-                LineChange::DeleteMany { start_line, .. } => *start_line,
-            };
-            line_b.cmp(&line_a) // Reverse order
-        });
-
-        for change in sorted_changes {
-            match change {
-                LineChange::Replace { line_number, new_content, .. } => {
-                    if line_number > 0 && line_number <= lines.len() {
-                        lines[line_number - 1] = new_content;
-                    }
-                }
-                LineChange::InsertAfter { line_number, new_content } => {
-                    if line_number <= lines.len() {
-                        lines.insert(line_number, new_content);
-                    }
-                }
-                LineChange::InsertBefore { line_number, new_content } => {
-                    if line_number > 0 && line_number <= lines.len() {
-                        lines.insert(line_number - 1, new_content);
-                    }
-                }
-                LineChange::Delete { line_number } => {
-                    if line_number > 0 && line_number <= lines.len() {
-                        lines.remove(line_number - 1);
-                    }
-                }
-                _ => {
-                    // Handle other change types as needed
-                }
-            }
-        }
-
-        Ok(lines.join("\n"))
-    }
+    // fn apply_changes_to_content(
+    //     &self,
+    //     original_content: &str,
+    //     line_changes: &[LineChange],
+    // ) -> AicedResult<String> {
+    //     let mut lines: Vec<String> = original_content.lines().map(|s| s.to_string()).collect();
+    // 
+    //     // Sort changes by line number in reverse order to avoid index shifting issues
+    //     let mut sorted_changes = line_changes.to_vec();
+    //     sorted_changes.sort_by(|a, b| {
+    //         let line_a = match a {
+    //             LineChange::Replace { line_number, .. } => *line_number,
+    //             LineChange::InsertAfter { line_number, .. } => *line_number,
+    //             LineChange::InsertBefore { line_number, .. } => *line_number,
+    //             LineChange::Delete { line_number } => *line_number,
+    //             LineChange::ReplaceRange { start_line, .. } => *start_line,
+    //             LineChange::InsertManyAfter { line_number, .. } => *line_number,
+    //             LineChange::InsertManyBefore { line_number, .. } => *line_number,
+    //             LineChange::DeleteMany { start_line, .. } => *start_line,
+    //         };
+    //         let line_b = match b {
+    //             LineChange::Replace { line_number, .. } => *line_number,
+    //             LineChange::InsertAfter { line_number, .. } => *line_number,
+    //             LineChange::InsertBefore { line_number, .. } => *line_number,
+    //             LineChange::Delete { line_number } => *line_number,
+    //             LineChange::ReplaceRange { start_line, .. } => *start_line,
+    //             LineChange::InsertManyAfter { line_number, .. } => *line_number,
+    //             LineChange::InsertManyBefore { line_number, .. } => *line_number,
+    //             LineChange::DeleteMany { start_line, .. } => *start_line,
+    //         };
+    //         line_b.cmp(&line_a) // Reverse order
+    //     });
+    // 
+    //     for change in sorted_changes {
+    //         match change {
+    //             LineChange::Replace { line_number, new_content, .. } => {
+    //                 if line_number > 0 && line_number <= lines.len() {
+    //                     lines[line_number - 1] = new_content;
+    //                 }
+    //             }
+    //             LineChange::InsertAfter { line_number, new_content } => {
+    //                 if line_number <= lines.len() {
+    //                     lines.insert(line_number, new_content);
+    //                 }
+    //             }
+    //             LineChange::InsertBefore { line_number, new_content } => {
+    //                 if line_number > 0 && line_number <= lines.len() {
+    //                     lines.insert(line_number - 1, new_content);
+    //                 }
+    //             }
+    //             LineChange::Delete { line_number } => {
+    //                 if line_number > 0 && line_number <= lines.len() {
+    //                     lines.remove(line_number - 1);
+    //                 }
+    //             }
+    //             _ => {
+    //                 // Handle other change types as needed
+    //             }
+    //         }
+    //     }
+    // 
+    //     Ok(lines.join("\n"))
+    // }
 
     fn detect_file_type(&self, file_path: &str) -> String {
         if let Some(extension) = std::path::Path::new(file_path).extension() {

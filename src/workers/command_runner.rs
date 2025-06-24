@@ -333,7 +333,7 @@ impl CommandRunner {
             result.repository_analysis.changes.clone()
         ).await?;
 
-        let url = format!("http://localhost:{}/diff?session={}", port, session_id);
+        let url = format!("http://localhost:{}?session={}", port, session_id);
 
         log::info!("📱 Opening interactive diff viewer...");
         log::info!("🔗 URL: {}", url);
