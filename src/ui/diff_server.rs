@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use warp::Filter;
 use serde_json::json;
-use crate::ui::session_manager::{SessionManager, SessionStatus};
+use crate::ui::session_manager::SessionManager;
 use crate::enums::file_change::FileChange;
+use crate::enums::session_status::SessionStatus;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::errors::{AicedResult, AicedError};
 
@@ -52,7 +52,7 @@ impl DiffServer {
         let api_routes = self.create_api_routes(Arc::clone(&session_manager));
 
         let routes = static_files
-            .or(assets_route)  // ADD THIS LINE
+            .or(assets_route) 
             .or(diff_route)
             .or(api_routes)
             .with(warp::cors().allow_any_origin());
@@ -123,33 +123,28 @@ impl DiffServer {
     ) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
         let session_manager_filter = warp::any().map(move || Arc::clone(&session_manager));
 
-        // GET /api/session/{id}
         let get_session = warp::path!("api" / "session" / String)
             .and(warp::get())
             .and(session_manager_filter.clone())
             .and_then(get_session_handler);
 
-        // POST /api/session/{id}/apply
         let apply_change = warp::path!("api" / "session" / String / "apply")
             .and(warp::post())
             .and(warp::body::json())
             .and(session_manager_filter.clone())
             .and_then(apply_change_handler);
 
-        // POST /api/session/{id}/unapply
         let unapply_change = warp::path!("api" / "session" / String / "unapply")
             .and(warp::post())
             .and(warp::body::json())
             .and(session_manager_filter.clone())
             .and_then(unapply_change_handler);
 
-        // POST /api/session/{id}/complete
         let complete_session = warp::path!("api" / "session" / String / "complete")
             .and(warp::post())
             .and(session_manager_filter.clone())
             .and_then(complete_session_handler);
 
-        // POST /api/session/{id}/cancel
         let cancel_session = warp::path!("api" / "session" / String / "cancel")
             .and(warp::post())
             .and(session_manager_filter)

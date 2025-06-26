@@ -10,3 +10,4 @@ pub mod api_response;
 pub mod technology_stack;
 pub mod validation_result;
 pub mod category_stats;
+pub mod diff;
