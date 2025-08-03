@@ -111,19 +111,17 @@ impl SessionManager {
                                         }
                                     }
                                     "delete_many" => {
-                                        if let line_number = change_item.line_number {
-                                            // Determine end_line based on old_content
-                                            let end_line = if let Some(old_content) = &change_item.old_content {
-                                                line_number + old_content.lines().count() - 1
-                                            } else {
-                                                line_number
-                                            };
-                                            
-                                            all_line_changes.push(LineChange::DeleteMany {
-                                                start_line: line_number,
-                                                end_line,
-                                            });
-                                        }
+                                        // Determine end_line based on old_content
+                                        let end_line = if let Some(old_content) = &change_item.old_content {
+                                            change_item.line_number + old_content.lines().count() - 1
+                                        } else {
+                                            change_item.line_number
+                                        };
+
+                                        all_line_changes.push(LineChange::DeleteMany {
+                                            start_line: change_item.line_number,
+                                            end_line,
+                                        });
                                     }
                                     _ => {}
                                 }

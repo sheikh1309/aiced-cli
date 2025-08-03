@@ -1,16 +1,14 @@
-use std::fs;
 use std::rc::Rc;
 use std::sync::Arc;
 use crate::adapters::aiced_adapter::AicedAdapter;
 use crate::errors::AicedResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
+use crate::prompts::system_analysis_prompt::SYSTEM_ANALYSIS_PROMPT;
+use crate::services::ai::anthropic::AnthropicProvider;
 use crate::services::analysis_parser::AnalysisParser;
 use crate::services::repo_scanner::RepoScanner;
 use crate::structs::analyze_repository_response::AnalyzeRepositoryResponse;
-use crate::structs::analyze_request::AnalyzeRequest;
-use crate::structs::analyze_response::AnalyzeResponse;
-use crate::structs::api_response::ApiResponse;
 use crate::structs::config::repository_config::RepositoryConfig;
 
 pub struct CodeAnalyzer {
@@ -22,7 +20,8 @@ pub struct CodeAnalyzer {
 impl CodeAnalyzer {
 
     pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
-        let adapter = Arc::new(AicedAdapter::new("http://localhost:3000".to_string(), "api-key-123456".to_string()));
+        let ai_provider = Arc::new(AnthropicProvider::new(std::env::var("ANTHROPIC_API_KEY").unwrap()));
+        let adapter = Arc::new(AicedAdapter::new(ai_provider));
         Self { repo_scanner: RepoScanner::new(Arc::clone(&repository_config), Arc::clone(&adapter)), repository_config, adapter }
     }
 
@@ -32,11 +31,9 @@ impl CodeAnalyzer {
         let mut logger = AnimatedLogger::new("Analyzing Repository".to_string());
         logger.start();
 
-        let request_body = AnalyzeRequest { prompt: user_prompt };
-        // let analyze_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/analyze", &request_body, &mut logger, "Analysis").await?;
+        let analyze_data = self.adapter.stream_llm_chat(user_prompt, SYSTEM_ANALYSIS_PROMPT.to_string()).await;
         logger.stop("Analysis complete").await;
-        let content = fs::read_to_string("ai_response.txt").unwrap();
-        let mut analysis_parser = AnalysisParser::new(&content);
+        let mut analysis_parser = AnalysisParser::new(&analyze_data?.content);
         let analysis = analysis_parser.parse()?;
 
         Ok(Rc::new(AnalyzeRepositoryResponse {

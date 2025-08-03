@@ -348,7 +348,6 @@ impl ErrorHandler {
     }
 }
 
-
 impl From<std::io::Error> for AicedError {
     fn from(error: std::io::Error) -> Self {
         AicedError::SystemError {

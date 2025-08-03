@@ -1,117 +1,72 @@
-use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use crate::errors::{AicedError, AicedResult};
-use crate::logger::animated_logger::AnimatedLogger;
-use crate::structs::api_response::ApiResponse;
+use crate::structs::stream_result::StreamResult;
+use crate::traits::ai_provider::AiProvider;
+use futures::StreamExt;
 
 pub struct AicedAdapter {
-    client: Client,
-    base_url: String,
-    api_key: String,
+    ai_provider: Arc<dyn AiProvider>
 }
 
 impl AicedAdapter {
 
-    pub fn new(base_url: String, api_key: String) -> Self {
-        Self {
-            client: Client::new(),
-            base_url,
-            api_key,
-        }
+    pub fn new(ai_provider: Arc<dyn AiProvider>) -> Self {
+        Self { ai_provider }
     }
 
-    pub async fn post_json<T, R>(
-        &self,
-        endpoint: &str,
-        request_body: &T,
-        logger: &mut AnimatedLogger,
-        operation_name: &str,
-    ) -> AicedResult<ApiResponse<R>>  where T: Serialize, R: for<'de> Deserialize<'de>{
-        let url = format!("{}/{}", self.base_url.trim_end_matches('/'), endpoint.trim_start_matches('/'));
+    pub async fn stream_llm_chat(&self, user_prompt: String, system_prompt: String) -> AicedResult<StreamResult> {
+        let mut full_content = String::new();
+        let mut input_tokens = 0u32;
+        let mut output_tokens = 0u32;
 
-        let response = match self.client
-            .post(&url)
-            .header("x-api-key", &self.api_key)
-            .header("Content-Type", "application/json")
-            .json(request_body)
-            .send()
-            .await
-        {
-            Ok(resp) => resp,
+        let mut stream = match self.ai_provider.stream_chat(system_prompt, vec![user_prompt]).await {
+            Ok(stream) => stream,
             Err(e) => {
-                logger.stop(&format!("{} failed", operation_name)).await;
-                log::error!("Network error during {} request: {}", operation_name, e);
                 return Err(AicedError::system_error(
                     "analysis Error",
-                    &format!("Failed to connect to {} server", operation_name)
+                    &format!("Failed to connect to {} server", e)
                 ).into());
-            }
+            },
         };
 
-        let body: ApiResponse<R> = match response.status() {
-            StatusCode::OK => {
-                match response.json().await {
-                    Ok(data) => data,
-                    Err(e) => {
-                        logger.stop(&format!("{} failed", operation_name)).await;
-                        log::error!("Failed to parse JSON response for {}: {}", operation_name, e);
-                        return Err(AicedError::system_error(
-                            "analysis Error",
-                            &format!("Invalid response format from {} server", operation_name)
-                        ).into());
+        let mut item_count = 0;
+        while let Some(result) = stream.next().await {
+            item_count += 1;
+
+            match result {
+                Ok(item) => {
+                    if !item.content.is_empty() {
+                        full_content.push_str(&item.content);
+                    }
+
+                    match item.input_tokens {
+                        Some(usage_input_tokens) => {
+                            input_tokens += usage_input_tokens;
+                        },
+                        None => {},
+                    }
+
+                    match item.output_tokens {
+                        Some(usage_output_tokens) => {
+                            output_tokens += usage_output_tokens;
+                        },
+                        None => {},
+                    }
+
+                    if item.is_complete {
+                        break;
                     }
                 }
-            },
-            StatusCode::REQUEST_TIMEOUT => {
-                logger.stop(&format!("{} failed", operation_name)).await;
-                log::error!("{} request timed out (408)", operation_name);
-                return Err(AicedError::system_error(
-                    "analysis Error",
-                    &format!("{} request timed out (408)", operation_name)
-                ).into());
-            },
-            status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                logger.stop(&format!("{} failed", operation_name)).await;
-                log::error!("{} request failed with status {}: {}", operation_name, status, error_text);
-                return Err(AicedError::system_error(
-                    "analysis Error",
-                    &format!("{} request failed with status {}: {}", operation_name, status, error_text)
-                ).into());
-            }
-        };
-
-        if !body.success {
-            logger.stop(&format!("{} failed", operation_name)).await;
-            log::error!("API returned error for {}: {}", operation_name, body.message);
-            return Err(AicedError::system_error(
-                "analysis Error",
-                &format!("{} failed: {}", operation_name, body.message)
-            ).into());
-        }
-
-        Ok(body)
-    }
-
-    pub async fn post_json_extract_data<T, R>(
-        &self,
-        endpoint: &str,
-        request_body: &T,
-        logger: &mut AnimatedLogger,
-        operation_name: &str,
-    ) -> AicedResult<R>  where T: Serialize, R: for<'de> Deserialize<'de> {
-        let response = self.post_json(endpoint, request_body, logger, operation_name).await?;
-
-        match response.data {
-            Some(data) => Ok(data),
-            None => {
-                logger.stop(&format!("{} failed", operation_name)).await;
-                log::error!("API response missing data field for {}", operation_name);
-                Err(AicedError::system_error(
-                    "analysis Error",
-                    &format!("API response missing data field for {}", operation_name)
-                ).into())
+                Err(e) => {
+                    log::info!("Stream error on item #{}: {}", item_count, e);
+                    return Err(AicedError::system_error(
+                        "analysis Error",
+                        &format!("Failed to connect to {} server", "analyze")
+                    ).into());
+                },
             }
         }
+
+        Ok(StreamResult { content: full_content, input_tokens, output_tokens })
     }
 }

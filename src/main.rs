@@ -16,6 +16,8 @@ mod workers;
 mod errors;
 mod adapters;
 mod ui;
+mod prompts;
+mod traits;
 
 #[tokio::main]
 async fn main() {

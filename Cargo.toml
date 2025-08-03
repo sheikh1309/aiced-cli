@@ -17,6 +17,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 futures = "0.3"
 toml = "0.8"
+async-trait = "0.1.88"
 dirs = "6.0.0"
 clap = { version = "4.5.40", features = ["derive"] }
 log = "0.4"
@@ -40,46 +41,4 @@ plugin-system = ["libloading"]
 metrics = ["prometheus"]
 file-watching = ["notify"]
 caching = ["flate2"]
-
-[profile.bench]
-opt-level = 3
-debug = false
-rpath = false
-lto = true
-debug-assertions = false
-codegen-units = 1
-
-[[bin]]
-name = "aiced-cli"
-path = "src/main.rs"
-
-[[test]]
-name = "integration"
-path = "tests/mod.rs"
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "consoleapi"] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"
-
-[lints.rust]
-unsafe_code = "forbid"
-missing_docs = "warn"
-unused_imports = "warn"
-unused_variables = "warn"
-
-[lints.clippy]
-all = "warn"
-pedantic = "warn"
-nursery = "warn"
-cargo = "warn"
-
-missing_errors_doc = "allow"
-missing_panics_doc = "allow"
-module_name_repetitions = "allow"
 

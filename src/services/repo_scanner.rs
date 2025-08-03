@@ -7,9 +7,7 @@ use crate::adapters::aiced_adapter::AicedAdapter;
 use crate::errors::AicedResult;
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
-use crate::structs::analyze_request::AnalyzeRequest;
-use crate::structs::analyze_response::AnalyzeResponse;
-use crate::structs::api_response::ApiResponse;
+use crate::prompts::file_filter_system_prompt::FILE_FILTER_SYSTEM_PROMPT;
 use crate::structs::config::repository_config::RepositoryConfig;
 use crate::structs::file_info::FileInfo;
 use crate::structs::files_cache::FilesCache;
@@ -110,10 +108,9 @@ impl RepoScanner {
         let mut logger = AnimatedLogger::new("File Filtering".to_string());
         logger.start();
 
-        let request_body = AnalyzeRequest { prompt: user_prompt };
-        let filter_data: ApiResponse<AnalyzeResponse> = self.adapter.post_json_extract_data("api/files_filter", &request_body, &mut logger, "File filtering").await?;
+        let filter_data = self.adapter.stream_llm_chat(user_prompt, FILE_FILTER_SYSTEM_PROMPT.to_string()).await;
 
-        let content = &filter_data.data.unwrap().content
+        let content = &filter_data?.content
             .replace("```json", "")
             .replace("```", "")
             .trim()
