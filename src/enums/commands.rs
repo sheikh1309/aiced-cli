@@ -1,4 +1,5 @@
 use clap::Subcommand;
+use crate::config::constants::{DEFAULT_DASHBOARD_PORT, DEFAULT_HISTORY_DAYS};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -13,13 +14,13 @@ pub enum Commands {
     },
     List,
     Dashboard {
-        #[clap(short, long, default_value = "8080")]
+        #[clap(short, long, default_value_t = DEFAULT_DASHBOARD_PORT)]
         port: u16,
     },
     Validate,
     History {
         repo: Option<String>,
-        #[clap(short, long, default_value = "7")]
+        #[clap(short, long, default_value_t = DEFAULT_HISTORY_DAYS)]
         days: u32,
     },
 }

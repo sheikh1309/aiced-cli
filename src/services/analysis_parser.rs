@@ -125,7 +125,7 @@ impl AnalysisParser {
                 continue;
             }
 
-            // Parse individual fields
+            
             if line.starts_with(PRIMARY_LANGUAGE_FIELD) {
                 stack.primary_language = Some(self.parse_field(PRIMARY_LANGUAGE_FIELD)?);
             } else if line.starts_with(FRAMEWORK_FIELD) {
@@ -185,7 +185,7 @@ impl AnalysisParser {
                 continue;
             }
 
-            // Parse key: value format
+            
             if let Some(colon_pos) = line.find(':') {
                 let key = line[..colon_pos].trim().to_string();
                 let value = line[colon_pos + 1..].trim().to_string();
@@ -230,7 +230,7 @@ impl AnalysisParser {
     }
 
     fn parse_summary(&mut self) -> AicedResult<String> {
-        // Find the analysis summary marker
+        
         while !self.is_eof() && !self.current_line().trim().starts_with(ANALYSIS_SUMMARY_MARKER) {
             self.advance();
         }
@@ -244,7 +244,7 @@ impl AnalysisParser {
 
         let mut summary_lines = Vec::new();
 
-        // Collect all non-empty lines until we hit a CHANGE marker
+        
         while !self.is_eof() && !self.current_line().starts_with(CHANGE_MARKER) {
             let line = self.current_line().trim();
             if !line.is_empty() {
@@ -267,7 +267,7 @@ impl AnalysisParser {
             .ok_or_else(|| AicedError::parse_error("InvalidFormat", Some(self.current), "InvalidFormat", Some(&line)))?
             .trim();
 
-        let current_line = self.current + 1; // Store for error reporting
+        let current_line = self.current + 1; 
         self.advance();
 
         match change_type {
@@ -282,7 +282,7 @@ impl AnalysisParser {
         let fields = self.parse_required_fields(MODIFY_FILE_REQUIRED_FIELDS)?;
         let mut line_changes = Vec::new();
 
-        // Parse all ACTION blocks
+        
         while !self.is_eof() && !self.current_line().starts_with(END_CHANGE_MARKER) {
             let line = self.current_line().trim();
 
@@ -342,22 +342,22 @@ impl AnalysisParser {
 
     fn parse_content_until_fixed(&mut self, end_marker: &str) -> AicedResult<String> {
         let mut content_lines = Vec::new();
-        let start_line = self.current; // Track where we started for debugging
+        let start_line = self.current; 
 
         while !self.is_eof() {
             let line = self.current_line();
             let trimmed_line = line.trim();
 
             if trimmed_line == end_marker {
-                self.advance(); // Move past the end marker
+                self.advance(); 
                 break;
             }
 
-            // Add the line to content (preserve original formatting)
+            
             content_lines.push(line.to_string());
             self.advance();
 
-            // Safety check: prevent infinite loops
+            
             if self.current - start_line > 10000 {
                 return Err(AicedError::parse_error(
                     "ContentTooLarge",
@@ -384,7 +384,7 @@ impl AnalysisParser {
     fn parse_delete_file(&mut self) -> AicedResult<FileChange> {
         let fields = self.parse_required_fields(DELETE_FILE_REQUIRED_FIELDS)?;
 
-        // Skip any remaining lines until END_CHANGE
+        
         while !self.is_eof() && !self.current_line().starts_with(END_CHANGE_MARKER) {
             self.advance();
         }
@@ -403,7 +403,7 @@ impl AnalysisParser {
     fn parse_required_fields(&mut self, required_fields: &[&str]) -> AicedResult<HashMap<String, String>> {
         let mut fields = HashMap::new();
         while !self.is_eof() && !self.is_terminator() {
-            let line = self.current_line().trim().to_string(); // Clone to avoid borrowing issues
+            let line = self.current_line().trim().to_string(); 
             let mut found_field = false;
 
             for &field in required_fields {
@@ -459,7 +459,7 @@ impl AnalysisParser {
 
     fn parse_line_action(&mut self) -> AicedResult<LineChange> {
         let action_type = self.parse_field(ACTION_FIELD)?;
-        let current_line = self.current; // Store for error reporting
+        let current_line = self.current; 
 
         match action_type.as_str() {
             "replace" => self.parse_replace_action(),
@@ -509,7 +509,7 @@ impl AnalysisParser {
     fn parse_insert_many_after_action(&mut self) -> AicedResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
 
-        // Parse NEW_LINES block
+        
         self.expect_line(NEW_LINES_MARKER)?;
         self.advance();
         let new_lines = self.parse_lines_until(END_NEW_LINES_MARKER)?;
@@ -523,7 +523,7 @@ impl AnalysisParser {
     fn parse_insert_many_before_action(&mut self) -> AicedResult<LineChange> {
         let line_number = self.parse_number_field(LINE_FIELD)?;
 
-        // Parse NEW_LINES block
+        
         self.expect_line(NEW_LINES_MARKER)?;
         self.advance();
         let new_lines = self.parse_lines_until(END_NEW_LINES_MARKER)?;
@@ -565,7 +565,7 @@ impl AnalysisParser {
         let start_line = self.parse_number_field(START_LINE_FIELD)?;
         let end_line = self.parse_number_field(END_LINE_FIELD)?;
 
-        // Validate line range
+        
         if start_line > end_line {
             return Err(AicedError::parse_error(
                 "ParseError",
@@ -575,12 +575,12 @@ impl AnalysisParser {
             );
         }
 
-        // Parse OLD_LINES block
+        
         self.expect_line(OLD_LINES_MARKER)?;
         self.advance();
         let old_content = self.parse_lines_until(END_OLD_LINES_MARKER)?;
 
-        // Parse NEW_LINES block
+        
         self.expect_line(NEW_LINES_MARKER)?;
         self.advance();
         let new_content = self.parse_lines_until(END_NEW_LINES_MARKER)?;

@@ -31,7 +31,7 @@ pub enum LineChange {
         old_content: Vec<String>,
         new_content: Vec<String>,
     },
-    // NEW: Multi-line actions
+    
     #[serde(rename = "insert_many_after")]
     InsertManyAfter {
         line_number: usize,
@@ -53,23 +53,23 @@ impl LineChange {
     pub fn is_multi_line(&self) -> bool {
         match self {
             LineChange::Replace { new_content, .. } => {
-                // Multi-line if new content contains newlines
+                
                 new_content.contains('\n')
             }
             LineChange::InsertAfter { new_content, .. } |
             LineChange::InsertBefore { new_content, .. } => {
-                // Multi-line if new content contains newlines
+                
                 new_content.contains('\n')
             }
             LineChange::ReplaceRange { start_line, end_line, .. } => {
-                // Multi-line if range spans more than one line
+                
                 end_line > start_line
             }
             LineChange::Delete { .. } => {
-                // Delete only affects one line
+                
                 false
             }
-            // NEW: Multi-line actions are always multi-line
+            
             LineChange::InsertManyAfter { .. } |
             LineChange::InsertManyBefore { .. } |
             LineChange::DeleteMany { .. } => true,
@@ -97,7 +97,7 @@ impl LineChange {
             }
             LineChange::Delete { line_number } => (*line_number, *line_number),
             LineChange::ReplaceRange { start_line, end_line, .. } => (*start_line, *end_line),
-            // NEW: Multi-line actions
+            
             LineChange::InsertManyAfter { line_number, new_lines } => {
                 (*line_number, *line_number + new_lines.len() - 1)
             }
@@ -112,7 +112,7 @@ impl LineChange {
         let (self_start, self_end) = self.get_affected_line_range();
         let (other_start, other_end) = other.get_affected_line_range();
 
-        // Check for overlap
+        
         !(self_end < other_start || other_end < self_start)
     }
 
@@ -145,7 +145,7 @@ impl LineChange {
             LineChange::ReplaceRange { start_line, end_line, new_content, .. } => {
                 format!("Replace lines {}-{} with {} lines", start_line, end_line, new_content.len())
             }
-            // NEW: Multi-line actions
+            
             LineChange::InsertManyAfter { line_number, new_lines } => {
                 format!("Insert {} lines after line {}", new_lines.len(), line_number)
             }

@@ -1,163 +1,162 @@
-# Ailyzer Optimization Package
+# aiced-cli
 
-## 🚀 **Quick Start**
+AI-powered code analysis tool with interactive diff viewer and automated change application.
 
-This package contains comprehensive optimizations for your ailyzer code analysis tool.
+## Features
 
-### **📦 What's Included**
-- Enhanced file modifier with priority-based change application
-- Comprehensive error handling system
-- Advanced statistics and risk assessment
-- Improved CLI interface with multiple application modes
-- Complete testing framework with 85% coverage
-- Detailed migration guide and documentation
+- **Multi-repository analysis**: Analyze multiple Git repositories from a single configuration
+- **AI-powered insights**: Uses Anthropic's Claude API for intelligent code analysis
+- **Interactive diff viewer**: Web-based interface to review and selectively apply changes
+- **Flexible configuration**: Support for custom analysis profiles and repository-specific settings
+- **Automated workflows**: Optional PR creation and notification systems
+- **Comprehensive validation**: Built-in configuration and repository validation
 
-### **⚡ Key Improvements**
-- **50% faster parsing** and analysis
-- **40% reduced memory usage**
-- **Comprehensive error handling** with recovery suggestions
-- **Priority-based change application** (security → bugs → improvements)
-- **Advanced risk assessment** with actionable recommendations
-
-## 📋 **Migration Steps**
-
-1. **Backup your current code**
-   ```bash
-   cp -r /path/to/your/ailyzer /path/to/ailyzer-backup-$(date +%Y%m%d)
-   ```
-
-2. **Replace core components**
-   ```bash
-   # Copy optimized files to your project
-   cp src/services/optimized_file_modifier.rs /your/project/src/services/file_modifier.rs
-   cp src/structs/enhanced_change_statistics.rs /your/project/src/structs/change_statistics.rs
-   cp src/workers/enhanced_command_runner.rs /your/project/src/workers/command_runner.rs
-   
-   # Add new error handling module
-   mkdir -p /your/project/src/errors
-   cp src/errors/mod.rs /your/project/src/errors/
-   ```
-
-3. **Update configuration**
-   ```bash
-   # Update Cargo.toml with new dependencies
-   cp Cargo.toml /your/project/
-   ```
-
-4. **Add testing infrastructure**
-   ```bash
-   # Copy test files
-   mkdir -p /your/project/tests
-   cp tests/* /your/project/tests/
-   ```
-
-5. **Update imports and fix compilation**
-   - Add `mod errors;` to your main.rs
-   - Replace `Box<dyn std::error::Error>` with `AilyzerResult<T>`
-   - Update error handling throughout your codebase
-
-## 📚 **Documentation**
-
-- **`docs/migration_guide.md`** - Complete step-by-step migration instructions
-- **`docs/architecture_analysis.md`** - Technical analysis and optimization details
-- **`docs/optimization_summary.md`** - Executive summary of all improvements
-- **`docs/parser_update_guide.md`** - Parser-specific migration instructions
-- **`docs/file_modifier_update_guide.md`** - File modifier migration details
-
-## 🧪 **Testing**
-
-After migration, run the comprehensive test suite:
+## Installation
 
 ```bash
-# Run all tests
-cargo test
+# Clone the repository
+git clone https://github.com/sheikh1309/ailyzer-cli
+cd aiced-cli
 
-# Run specific test modules
-cargo test parser_tests
-cargo test file_modifier_tests
+# Build the project
+cargo build --release
 
-# Run with coverage
-cargo test --all-features
+# Install globally (optional)
+cargo install --path .
 ```
 
-## 🔧 **New Features**
+## Prerequisites
 
-### **Priority-Based Change Application**
-```rust
-// Apply security fixes first, then bugs, then improvements
-FileModifier::apply_changes_by_priority(config, &changes)?;
+- Rust 1.70+
+- Anthropic API key (set as `ANTHROPIC_API_KEY` environment variable)
+- Git repositories to analyze
 
-// Apply only specific categories
-FileModifier::apply_changes_by_category(config, &changes, "SECURITY")?;
+## Quick Start
 
-// Apply only high-_severity: _ changes
-FileModifier::apply_changes_by_severity(config, &changes, "high")?;
+1. **Initialize configuration:**
+   ```bash
+   aiced init
+   ```
+
+2. **Configure your repositories** by editing the generated config file
+
+3. **Analyze repositories:**
+   ```bash
+   # Analyze all configured repositories
+   aiced analyze
+
+   # Analyze specific repository
+   aiced analyze --repo my-project
+
+   # Analyze with custom profile
+   aiced analyze --profile security-focused
+   ```
+
+4. **Review changes** in the interactive web interface that opens automatically
+
+5. **Validate configuration:**
+   ```bash
+   aiced validate
+   ```
+
+## Commands
+
+### `aiced init`
+Creates sample configuration files with multi-repository setup.
+
+### `aiced analyze [OPTIONS]`
+Analyzes configured repositories and presents changes via interactive diff viewer.
+
+**Options:**
+- `--repo <NAME>`: Analyze specific repository
+- `--tags <TAGS>`: Filter analysis by tags
+- `--profile <PROFILE>`: Use specific analysis profile
+
+### `aiced list`
+Lists all configured repositories with their settings.
+
+### `aiced validate`
+Validates configuration files and repository paths.
+
+### `aiced dashboard --port <PORT>` 
+Starts web dashboard (planned feature).
+
+### `aiced history [OPTIONS]`
+Shows analysis history (planned feature).
+
+**Options:**
+- `--days <DAYS>`: Number of days to show (default: 7)
+
+## Configuration
+
+The tool uses TOML configuration files for repository and analysis settings. Key configuration areas:
+
+- **Repository settings**: Path, auto-pull, PR creation preferences
+- **AI provider settings**: API keys, model preferences
+- **Analysis profiles**: Custom prompts and filtering rules
+- **Notification settings**: Slack, email, webhooks
+- **Output preferences**: Formatting and verbosity levels
+
+## Interactive Diff Viewer
+
+The web-based diff viewer provides:
+- Side-by-side code comparison
+- Selective change application
+- Change categorization and filtering
+- Real-time validation feedback
+- Session management with timeout handling
+
+## Architecture
+
+- **Command Runner**: Central orchestrator for all CLI commands
+- **Repository Manager**: Handles multi-repository operations
+- **Code Analyzer**: AI-powered analysis engine
+- **Diff Server**: Web interface for change review
+- **File Modifier**: Safe change application with validation
+- **Configuration System**: Flexible TOML-based configuration
+
+## Development Status
+
+**Implemented:**
+- ✅ Core CLI interface and commands
+- ✅ Multi-repository analysis
+- ✅ Interactive diff viewer
+- ✅ Configuration management
+- ✅ AI integration (Anthropic Claude)
+- ✅ Error handling and validation
+
+**Planned:**
+- 🚧 Web dashboard with historical data
+- 🚧 PR creation automation
+- 🚧 Notification systems (Slack, email)
+- 🚧 Plugin system
+- 🚧 Analysis result caching
+- 🚧 Performance metrics and monitoring
+
+## Environment Variables
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key-here"
+export RUST_LOG="info"  # Optional: for detailed logging
 ```
 
-### **Advanced Statistics**
-```rust
-let stats = FileModifier::get_change_statistics(&changes);
-let risk_score = stats.calculate_risk_score(); // 0-100
-let priority = stats.get_priority_recommendation(); // Immediate, High, Medium, Low
-stats.print_summary(); // Comprehensive report
-```
+## Contributing
 
-### **Enhanced Error Handling**
-```rust
-// User-friendly error messages with suggestions
-ErrorHandler::handle_error(&error);
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
 
-// Structured error types
-AilyzerError::config_error("Invalid path", Some("repository.path"), Some("Use absolute path"));
-```
+## License
 
-## ⚠️ **Breaking Changes**
+MIT License - see LICENSE file for details.
 
-1. **Error Types:** All functions now return `AilyzerResult<T>`
-2. **FileModifier API:** New methods added, some signatures changed
-3. **ChangeStatistics:** Complete API overhaul
+## Support
 
-See `docs/migration_guide.md` for detailed compatibility fixes.
-
-## 📞 **Support**
-
-If you encounter any issues during migration:
-
-1. Check the troubleshooting section in `docs/migration_guide.md`
-2. Run `cargo run -- validate` to check configuration
-3. Enable debug logging with `RUST_LOG=debug`
-4. Review the specific component guides in the docs folder
-
-## 🎯 **Performance Benchmarks**
-
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| Parse Speed | ~100ms | ~50ms | 50% faster |
-| Memory Usage | ~50MB | ~30MB | 40% reduction |
-| Error Recovery | Manual | Automatic | 100% better |
-| Test Coverage | 0% | 85% | New feature |
-
-## ✅ **Migration Checklist**
-
-- [ ] Backup existing codebase
-- [ ] Update Cargo.toml dependencies
-- [ ] Replace core components
-- [ ] Add error handling module
-- [ ] Update imports and error types
-- [ ] Add testing infrastructure
-- [ ] Fix breaking changes
-- [ ] Run comprehensive tests
-- [ ] Test core functionality
-- [ ] Performance testing
-- [ ] Deploy to production
-
-## 🎉 **What's Next**
-
-After successful migration, you'll have:
-- A more reliable and performant code analysis tool
-- Better error handling and user experience
-- Comprehensive testing for continued development
-- Foundation for future enhancements (web dashboard, plugins, etc.)
-
-Enjoy your optimized ailyzer! 🚀
+For issues and questions:
+- Check the configuration with `aiced validate`
+- Enable debug logging with `RUST_LOG=debug`
+- Review error messages for suggestions
+- Open issues on the GitHub repository
 

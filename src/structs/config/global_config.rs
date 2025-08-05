@@ -7,7 +7,7 @@ pub struct GlobalConfig {
     pub scan_interval: String,
 }
 
-// Default implementations
+
 impl Default for GlobalConfig {
     fn default() -> Self {
         Self {

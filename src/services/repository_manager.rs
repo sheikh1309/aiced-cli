@@ -1,6 +1,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use tokio::time::sleep;
+use crate::config::constants::{DEFAULT_SLEEP_BETWEEN_REPOS_SECS, sleep_duration_secs};
 use crate::errors::{AicedError, AicedResult};
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::services::code_analyzer::CodeAnalyzer;
@@ -29,9 +30,11 @@ impl RepositoryManager {
             self.analyze_repository(Arc::new(repo.clone()), results).await?;
             
             if index < enabled_repos.len() - 1 {
-                let mut logger = AnimatedLogger::new("Sleeping for 60 seconds".to_string());
+                let mut logger = AnimatedLogger::new(format!(
+                    "Sleeping for {} seconds", DEFAULT_SLEEP_BETWEEN_REPOS_SECS
+                ));
                 logger.start();
-                sleep(Duration::from_secs(60)).await;
+                sleep(sleep_duration_secs(DEFAULT_SLEEP_BETWEEN_REPOS_SECS)).await;
                 logger.stop("Resume To Next Repository").await;
             }
         }
@@ -45,7 +48,7 @@ impl RepositoryManager {
             self.pull_repository(Arc::clone(&repository_config)).await?;
         }
 
-        let analyzer = CodeAnalyzer::new(Arc::clone(&repository_config));
+        let analyzer = CodeAnalyzer::new(Arc::clone(&repository_config))?;
         let analyze_repository_response = analyzer.analyze_repository().await?;
         results.push(Rc::clone(&analyze_repository_response));
 

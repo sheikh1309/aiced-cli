@@ -57,7 +57,7 @@ impl FilesCache {
             return false;
         }
 
-        // Compare actual file sets
+        
         let cached_files: HashSet<String> = self.files.iter().cloned().collect();
         let current_files_set: HashSet<String> = current_files.iter()
             .map(|p| p.to_string_lossy().to_string())

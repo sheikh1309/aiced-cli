@@ -1,7 +1,8 @@
 use std::rc::Rc;
 use std::sync::Arc;
 use crate::adapters::aiced_adapter::AicedAdapter;
-use crate::errors::AicedResult;
+use crate::config::constants::ANTHROPIC_API_KEY_ENV;
+use crate::errors::{AicedError, AicedResult};
 use crate::helpers::prompt_generator;
 use crate::logger::animated_logger::AnimatedLogger;
 use crate::prompts::system_analysis_prompt::SYSTEM_ANALYSIS_PROMPT;
@@ -19,10 +20,29 @@ pub struct CodeAnalyzer {
 
 impl CodeAnalyzer {
 
-    pub fn new(repository_config: Arc<RepositoryConfig>) -> Self {
-        let ai_provider = Arc::new(AnthropicProvider::new(std::env::var("ANTHROPIC_API_KEY").unwrap()));
+    pub fn new(repository_config: Arc<RepositoryConfig>) -> AicedResult<Self> {
+        let api_key = std::env::var(ANTHROPIC_API_KEY_ENV)
+            .map_err(|_| AicedError::configuration_error(
+                "ANTHROPIC_API_KEY environment variable not set",
+                Some("environment"),
+                Some("Set your Anthropic API key: export ANTHROPIC_API_KEY=your_key_here")
+            ))?;
+        
+        if api_key.trim().is_empty() {
+            return Err(AicedError::configuration_error(
+                "ANTHROPIC_API_KEY cannot be empty",
+                Some("environment"),
+                Some("Provide a valid Anthropic API key")
+            ));
+        }
+
+        let ai_provider = Arc::new(AnthropicProvider::new(api_key));
         let adapter = Arc::new(AicedAdapter::new(ai_provider));
-        Self { repo_scanner: RepoScanner::new(Arc::clone(&repository_config), Arc::clone(&adapter)), repository_config, adapter }
+        Ok(Self { 
+            repo_scanner: RepoScanner::new(Arc::clone(&repository_config), Arc::clone(&adapter)), 
+            repository_config, 
+            adapter 
+        })
     }
 
     pub async fn analyze_repository(&self) -> AicedResult<Rc<AnalyzeRepositoryResponse>> {

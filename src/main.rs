@@ -1,4 +1,3 @@
-//! Aiced - AI-powered code analysis tool
 
 use clap::Parser;
 use std::process;
@@ -25,11 +24,9 @@ async fn main() {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    // Run the actual application
     if let Err(e) = run().await {
         ErrorHandler::handle_error(&e);
 
-        // Exit with appropriate code based on error severity
         let exit_code = match e.severity() {
             ErrorSeverity::Critical => 1,
             ErrorSeverity::High => 2,

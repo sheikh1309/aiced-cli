@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AicedError {
-    // Configuration errors
     ConfigurationError {
         message: String,
         field: Option<String>,
@@ -15,7 +14,6 @@ pub enum AicedError {
         reason: String,
     },
 
-    // Repository errors
     RepositoryError {
         repository: String,
         operation: String,
@@ -26,7 +24,6 @@ pub enum AicedError {
         available: Vec<String>,
     },
 
-    // File operation errors
     FileOperationError {
         file_path: String,
         operation: String,
@@ -39,7 +36,6 @@ pub enum AicedError {
         actual: String,
     },
 
-    // Parser errors
     ParseError {
         content_type: String,
         line_number: Option<usize>,
@@ -47,7 +43,6 @@ pub enum AicedError {
         context: Option<String>,
     },
 
-    // Analysis errors
     AnalysisError {
         repository: String,
         stage: String,
@@ -55,7 +50,6 @@ pub enum AicedError {
         recoverable: bool,
     },
 
-    // Network/API errors
     NetworkError {
         operation: String,
         url: Option<String>,
@@ -63,7 +57,6 @@ pub enum AicedError {
         reason: String,
     },
 
-    // Validation errors
     ValidationError {
         field: String,
         value: String,
@@ -71,20 +64,17 @@ pub enum AicedError {
         suggestion: Option<String>,
     },
 
-    // System errors
     SystemError {
         operation: String,
         reason: String,
     },
 
-    // User input errors
     UserInputError {
         input: String,
         expected: String,
         suggestion: String,
     },
 
-    // Multiple errors (for batch operations)
     MultipleErrors {
         errors: Vec<AicedError>,
         context: String,
@@ -93,6 +83,14 @@ pub enum AicedError {
 
 impl AicedError {
     pub fn config_error(message: &str, field: Option<&str>, suggestion: Option<&str>) -> Self {
+        Self::ConfigurationError {
+            message: message.to_string(),
+            field: field.map(|s| s.to_string()),
+            suggestion: suggestion.map(|s| s.to_string()),
+        }
+    }
+
+    pub fn configuration_error(message: &str, field: Option<&str>, suggestion: Option<&str>) -> Self {
         Self::ConfigurationError {
             message: message.to_string(),
             field: field.map(|s| s.to_string()),
@@ -319,13 +317,10 @@ impl ErrorHandler {
     pub fn handle_error(error: &AicedError) {
         let severity = error.severity();
 
-        // Log technical details
         log::error!("[{}] {}", severity.name(), error.technical_details());
 
-        // Print user-friendly message
         log::error!("{} {}", severity.emoji(), error.user_message());
 
-        // Additional actions based on severity
         match severity {
             ErrorSeverity::Critical => {
                 log::error!("🚨 Critical error detected - application may need to exit");
@@ -341,7 +336,6 @@ impl ErrorHandler {
             }
         }
 
-        // Recovery suggestions
         if error.is_recoverable() {
             log::error!("🔄 This error is recoverable - you can retry the operation");
         }

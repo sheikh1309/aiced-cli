@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::io::{self, Write};
 use std::time::{Instant};
+use crate::config::constants::DEFAULT_TIMEOUT_MINUTES;
 use crate::enums::commands::Commands;
 use crate::config::config_manager::ConfigManager;
 use crate::errors::{AicedError, AicedResult};
@@ -349,9 +350,9 @@ impl CommandRunner {
         }
 
         log::info!("👆 Review changes in your browser and click 'Complete Review' when done");
-        log::info!("⏱️ Waiting for review completion (timeout: 30 minutes)...");
+        log::info!("⏱️ Waiting for review completion (timeout: {} minutes)...", DEFAULT_TIMEOUT_MINUTES);
 
-        let applied_change_ids = diff_server.wait_for_completion(&session_id, 30).await?;
+        let applied_change_ids = diff_server.wait_for_completion(&session_id, DEFAULT_TIMEOUT_MINUTES).await?;
 
         diff_server.shutdown().await?;
 

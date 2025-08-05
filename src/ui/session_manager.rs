@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use dashmap::DashMap;
 use uuid::Uuid;
+use crate::config::constants::{SUPPORTED_FILE_EXTENSIONS, DEFAULT_FILE_TYPE};
 use crate::enums::file_change::FileChange;
 use crate::enums::line_change::LineChange;
 use crate::enums::session_status::SessionStatus;
@@ -222,6 +223,26 @@ impl SessionManager {
         Ok(())
     }
 
+    pub fn cleanup_expired_sessions(&self) {
+        let sessions_to_remove: Vec<String> = self.sessions
+            .iter()
+            .filter_map(|entry| {
+                let session = entry.value();
+                match session.status {
+                    SessionStatus::Completed | SessionStatus::Cancelled => {
+                        Some(entry.key().clone())
+                    }
+                    _ => None
+                }
+            })
+            .collect();
+
+        for session_id in sessions_to_remove {
+            self.sessions.remove(&session_id);
+            log::debug!("🧹 Cleaned up session: {}", session_id);
+        }
+    }
+
     fn create_file_diff(&self, repository_config: &RepositoryConfig, file_path: &str, reason: &str, line_changes: &[LineChange]) -> AicedResult<FileDiff> {
         let full_path = format!("{}/{}", repository_config.path, file_path).replace("//", "/");
         let original_content = std::fs::read_to_string(&full_path)?;
@@ -411,29 +432,14 @@ impl SessionManager {
 
     fn detect_file_type(&self, file_path: &str) -> String {
         if let Some(extension) = std::path::Path::new(file_path).extension() {
-            match extension.to_str().unwrap_or("") {
-                "rs" => "rust".to_string(),
-                "js" | "jsx" => "javascript".to_string(),
-                "ts" | "tsx" => "typescript".to_string(),
-                "py" => "python".to_string(),
-                "java" => "java".to_string(),
-                "cpp" | "cc" | "cxx" => "cpp".to_string(),
-                "c" => "c".to_string(),
-                "h" | "hpp" => "c".to_string(),
-                "go" => "go".to_string(),
-                "php" => "php".to_string(),
-                "rb" => "ruby".to_string(),
-                "html" => "html".to_string(),
-                "css" => "css".to_string(),
-                "json" => "json".to_string(),
-                "xml" => "xml".to_string(),
-                "yaml" | "yml" => "yaml".to_string(),
-                "toml" => "toml".to_string(),
-                "md" => "markdown".to_string(),
-                _ => "text".to_string(),
+            if let Some(ext_str) = extension.to_str() {
+                for (ext, file_type) in SUPPORTED_FILE_EXTENSIONS {
+                    if ext_str == *ext {
+                        return file_type.to_string();
+                    }
+                }
             }
-        } else {
-            "text".to_string()
         }
+        DEFAULT_FILE_TYPE.to_string()
     }
 }
