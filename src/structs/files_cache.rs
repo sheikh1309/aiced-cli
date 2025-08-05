@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use crate::errors::AicedResult;
+use crate::errors::{AicedResult, AicedError};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FilesCache {
@@ -44,7 +44,8 @@ impl FilesCache {
             std::fs::create_dir_all(parent)?;
         }
 
-        let cache_content = toml::to_string_pretty(self).unwrap();
+        let cache_content = toml::to_string_pretty(self)
+            .map_err(|e| AicedError::system_error("serialize_cache", &e.to_string()))?;
         std::fs::write(cache_path, cache_content)?;
 
         log::info!("💾 Cache updated with {} filtered files", self.files.len());
@@ -80,7 +81,7 @@ impl FilesCache {
     fn current_timestamp() -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or(std::time::Duration::from_secs(0))
             .as_secs()
     }
 }

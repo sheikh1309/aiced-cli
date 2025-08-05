@@ -303,10 +303,10 @@ impl AnalysisParser {
         self.advance();
 
         Ok(FileChange::ModifyFile {
-            file_path: fields.get(FILE_FIELD).unwrap().clone(),
-            reason: fields.get(REASON_FIELD).unwrap().clone(),
-            severity: fields.get(SEVERITY_FIELD).unwrap().clone(),
-            category: fields.get(CATEGORY_FIELD).unwrap().clone(),
+            file_path: self.get_required_field(&fields, FILE_FIELD)?,
+            reason: self.get_required_field(&fields, REASON_FIELD)?,
+            severity: self.get_required_field(&fields, SEVERITY_FIELD)?,
+            category: self.get_required_field(&fields, CATEGORY_FIELD)?,
             line_changes,
         })
     }
@@ -332,10 +332,10 @@ impl AnalysisParser {
         self.advance();
 
         Ok(FileChange::CreateFile {
-            file_path: fields.get(FILE_FIELD).unwrap().clone(),
-            reason: fields.get(REASON_FIELD).unwrap().clone(),
-            severity: fields.get(SEVERITY_FIELD).unwrap().clone(),
-            category: fields.get(CATEGORY_FIELD).unwrap().clone(),
+            file_path: self.get_required_field(&fields, FILE_FIELD)?,
+            reason: self.get_required_field(&fields, REASON_FIELD)?,
+            severity: self.get_required_field(&fields, SEVERITY_FIELD)?,
+            category: self.get_required_field(&fields, CATEGORY_FIELD)?,
             content,
         })
     }
@@ -393,10 +393,10 @@ impl AnalysisParser {
         self.advance();
 
         Ok(FileChange::DeleteFile {
-            file_path: fields.get(FILE_FIELD).unwrap().clone(),
-            reason: fields.get(REASON_FIELD).unwrap().clone(),
-            severity: fields.get(SEVERITY_FIELD).unwrap().clone(),
-            category: fields.get(CATEGORY_FIELD).unwrap().clone(),
+            file_path: self.get_required_field(&fields, FILE_FIELD)?,
+            reason: self.get_required_field(&fields, REASON_FIELD)?,
+            severity: self.get_required_field(&fields, SEVERITY_FIELD)?,
+            category: self.get_required_field(&fields, CATEGORY_FIELD)?,
         })
     }
 
@@ -636,6 +636,17 @@ impl AnalysisParser {
             return Err(AicedError::parse_error("expect_line", Some(self.current + 1), expected, Some(line)));
         }
         Ok(())
+    }
+
+    fn get_required_field(&self, fields: &HashMap<String, String>, field_name: &str) -> AicedResult<String> {
+        fields.get(field_name)
+            .ok_or_else(|| AicedError::parse_error(
+                "missing_field", 
+                Some(self.current + 1), 
+                field_name, 
+                Some(&format!("Required field '{}' not found", field_name))
+            ))
+            .map(|s| s.clone())
     }
 }
 

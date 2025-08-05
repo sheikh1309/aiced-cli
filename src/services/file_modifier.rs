@@ -102,7 +102,7 @@ impl FileModifier {
 
         if !full_path.exists() {
             return Err(AicedError::file_error(
-                full_path.to_str().unwrap(),
+                full_path.to_str().unwrap_or("<invalid_path>"),
                 "not_found",
                 &format!("File does not exist: {}", full_path.display())
             ));
@@ -852,7 +852,7 @@ impl FileModifier {
 
         if !full_path.exists() {
             return Err(AicedError::file_error(
-                full_path.to_str().unwrap(),
+                full_path.to_str().unwrap_or("<invalid_path>"),
                 "not_found",
                 &format!("File does not exist: {}", full_path.display())
             ));
